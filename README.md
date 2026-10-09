@@ -245,7 +245,7 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | The five monochrome looks | tested on a GR IV 1.11 (see GR4-MonoUnlock) |
 | Keeping the slot's own "High Contrast" name and icon | the name and icon are RICOH's own, unchanged; this exact combination has not been installed yet |
 | Sliders opening at 0 (grain off) | made of the same changes as the tested build (a subset of them); not installed on its own yet |
-| Looks that need two tone curves | built and checked on the computer; not yet installed |
+| Looks that need two or three tone curves (colour casts, toned looks) | built and checked on the computer; not yet installed |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files

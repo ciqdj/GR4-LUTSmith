@@ -26,7 +26,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -200,42 +200,43 @@ def rebuild(source, frames, consumed, patched, changed):
 # slider settings for it) and where the look itself goes. Exported from the
 # builds that were tested on a GR IV 1.11.
 _DATA = '''
-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
+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
 '''
 DATA = json.loads(zlib.decompress(base64.b64decode(''.join(_DATA.split()))))
 LOOK = DATA['look']
@@ -263,14 +264,16 @@ def look_changes(look):
         buf, bufs = LOOK['single'], [LOOK['single']]
     elif len(distinct) == 2:
         buf, bufs = LOOK['pair'], [LOOK['pair'], LOOK['single']]
+    elif len(distinct) == 3:
+        buf, bufs = LOOK['pair'], [LOOK['pair'], LOOK['single'], LOOK['third']]
     else:
-        raise Refused('at most two different channel curves are supported')
+        raise Refused('at most three different channel curves are supported')
     for off, old in LOOK['select']:
         out.append((off, old, struct.pack('<I', buf['set']).hex(), 'use the look\'s tone curves'))
     for k, (b, c) in enumerate(zip(bufs, distinct)):
         out.append((b['curve_off'], b['curve_old'], struct.pack('<256H', *c).hex(), f'tone curve {k + 1}'))
     ptrs = [bufs[distinct.index(list(c))]['curve'] for c in curves]
-    if len(distinct) == 2:
+    if len(distinct) >= 2:
         out.append((LOOK['pair']['chan_off'], LOOK['pair']['chan_old'], struct.pack('<III', *ptrs).hex(),
                     'tone curve per colour channel'))
     return out
@@ -574,7 +577,7 @@ def render(v, look):
 
 
 # ------------------------------------------------------------------ fitting
-CHANNELS = {'single': [0, 0, 0], 'rg-b': [0, 0, 1], 'r-gb': [0, 1, 1], 'rb-g': [0, 1, 0]}
+CHANNELS = {'single': [0, 0, 0], 'rg-b': [0, 0, 1], 'r-gb': [0, 1, 1], 'rb-g': [0, 1, 0], 'rgb': [0, 1, 2]}
 
 
 def _softplus(x):
@@ -793,7 +796,8 @@ def apply_lut(lut, y, space):
 PAIR_GAIN, HELD_TOL, PHOTO_GAIN = 0.10, 0.02, 0.5
 PHOTO_WEIGHT = 0.5      # the photo counts half as much as the LUT's own colours, however many pixels it has
 GREY_WEIGHT = 0.5       # neutral greys count half as much too: a colour cast on greys is the most visible error
-GREY_TOL, CC_TOL = 0.10, 0.10            # two curves must not make greys or the ColorChecker worse by more
+GREY_TOL, CC_TOL = 0.10, 0.10            # more curves must not make greys or the ColorChecker worse by more
+GREY_GAIN, RANGE_TOL = 0.5, 0.05         # ... and count as a gain when greys improve by 0.5 (range within 5 %)
 EVERYDAY_CC, EVERYDAY_GREY, EVERYDAY_CAST = 2.0, 2.0, 2.5
 # "good on everyday colours": ColorChecker mean < 2 and greys < 2 (a small visible difference at most),
 # and no visible colour cast on any grey (largest a*b* difference < 2.5)
@@ -876,12 +880,22 @@ def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print)
         log(f'  {mode:7s} ΔE00 {e:.3f}' + (f'  photo {h:.3f}' if h is not None else '')
             + f'  ColorChecker {ev["colorchecker"]["de00_mean"]:.3f}  greys {ev["greys"]["de00_mean"]:.3f}')
         return dict(e=e, h=h, cc=ev['colorchecker']['de00_mean'], grey=ev['greys']['de00_mean'], look=look)
+    def better(new, old):
+        """More curves only when they clearly help (whole range, everyday colours or greys)
+        and make nothing worse (photo, greys, ColorChecker, whole range)."""
+        gain = (new['e'] < old['e'] * (1 - PAIR_GAIN) or new['cc'] < old['cc'] * (1 - PAIR_GAIN)
+                or new['grey'] <= old['grey'] - GREY_GAIN)
+        no_worse = ((old['h'] is None or new['h'] <= old['h'] + HELD_TOL) and new['grey'] <= old['grey'] + GREY_TOL
+                    and new['cc'] <= old['cc'] + CC_TOL and new['e'] <= old['e'] * (1 + RANGE_TOL))
+        return gain and no_worse
     if curve == 'auto':
-        s1 = one('single')
+        use = one('single')
         p = min((one(m) for m in ('rg-b', 'r-gb', 'rb-g')), key=lambda r: r['e'])
-        better = (p['e'] < s1['e'] * (1 - PAIR_GAIN) and (s1['h'] is None or p['h'] <= s1['h'] + HELD_TOL)
-                  and p['grey'] <= s1['grey'] + GREY_TOL and p['cc'] <= s1['cc'] + CC_TOL)
-        use = p if better else s1
+        if better(p, use):
+            use = p
+        t3 = one('rgb')
+        if better(t3, use):
+            use = t3
     elif curve == 'pair':
         use = min((one(m) for m in ('rg-b', 'r-gb', 'rb-g')), key=lambda r: r['e'])
     else:
@@ -990,7 +1004,7 @@ def main(argv=None):
         p.add_argument('--space', choices=('srgb', 'adobe'), default='srgb',
                        help='colour space the LUT was made for (default srgb)')
         p.add_argument('--photo', type=Path, help='a DNG from your GR IV: judges the fit on real content (needs rawpy)')
-        p.add_argument('--curve', choices=('auto', 'single', 'pair'), default='auto', help=argparse.SUPPRESS)
+        p.add_argument('--curve', choices=('auto', 'single', 'pair', 'rgb'), default='auto', help=argparse.SUPPRESS)
         p.add_argument('--iters', type=int, default=1500, help=argparse.SUPPRESS)
     m = sub.add_parser('make', help='LUT + official firmware -> firmware with the look')
     lut_args(m)
