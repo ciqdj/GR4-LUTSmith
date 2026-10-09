@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """GR4-LUTSmith: put the look of a .cube LUT into your RICOH GR IV (firmware 1.11).
 
-Fits the LUT to the camera's own look processing (a colour matrix and tone
-curves) and writes a firmware file that carries the result as an extra Image
+Fits the LUT to the camera's own look processing (a colour matrix, tone
+curves and per-hue colour sectors) and writes a firmware file that carries the result as an extra Image
 Control look. Starts from the official RICOH firmware file you downloaded
 yourself. A file is written only if every check passes.
 
 Usage
-  python3 gr4_lutsmith.py make     LUT.cube OFFICIAL_fwdc248b.bin [--space srgb|adobe] [--photo DNG] [-o DIR]
-  python3 gr4_lutsmith.py fit      LUT.cube [--space srgb|adobe] [--photo DNG] [-o DIR]   (no firmware needed)
+  python3 gr4_lutsmith.py make     LUT.cube OFFICIAL_fwdc248b.bin [--space srgb|adobe] [--photo DNG] [--no-hue] [-o DIR]
+  python3 gr4_lutsmith.py fit      LUT.cube [--space srgb|adobe] [--photo DNG] [--no-hue] [-o DIR]   (no firmware needed)
   python3 gr4_lutsmith.py build    DIR/look.json OFFICIAL_fwdc248b.bin [-o DIR]
   python3 gr4_lutsmith.py preview  DIR/look.json PHOTO.DNG [-o sheet.jpg]   (needs rawpy, pillow)
   python3 gr4_lutsmith.py check    ANY_fwdc248b.bin
@@ -26,7 +26,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -241,6 +241,16 @@ zU3qg8t7bNmSRduicQLdbbvbdred3XS3ZffrTkFVD1e8TdWW/vdCqfovcUvGLbmtS9p69irJ9oFidFP/
 DATA = json.loads(zlib.decompress(base64.b64decode(''.join(_DATA.split()))))
 LOOK = DATA['look']
 
+# Hue sectors: [offset, original bytes, new bytes] of the changes that turn them on, and [offset, original
+# bytes] of the place that takes the look's hue-sector matrices.
+_HUE = '''
+eNrt0TtOxDAQgOG7uE4xfttcZZUicRJpCxqgQELcHe8kGGYEKy14u/FXOIks28r/prbz67qoh9PJQArRxDCoDFMA550alEk5Q66P
+47AvcNpcX+Bd+nWBjh5sAhgUmNvUjeKxZy5zuszu2Di7+q6912n/7kvZ8Ox2oDW3H/jDBcJx4F9nNY6Depxens5lfa5/fL9ccPVy
+E8pNYiITGM84xoqrZjQ1mendQ1AFzc3E9O4hqAWVZmZ69xDUipamML17CGpDa7MwvXsIQsPFUYGWuE8PQeh9wKdvJe7TQxDaoK8B
+VPcegtAWmYaP3j0EoR2yjWF69xCE9sg1lvlnDzW+fwAfTUfe
+'''
+HUE = json.loads(zlib.decompress(base64.b64decode(''.join(_HUE.split()))))
+
 
 def look_changes(look):
     """(offset, old, new, what) for one look: matrix, curve table selection, curve(s)."""
@@ -279,10 +289,29 @@ def look_changes(look):
     return out
 
 
+def hue_changes(look):
+    """(offset, old, new, what) for the look's 12 hue-sector matrices."""
+    q = (look.get('hue_sectors') or {}).get('matrices_q10')
+    if not q:
+        return []
+    import numpy as np
+    q = np.array(q, int)
+    if q.shape != (12, 3, 3) or np.abs(q).max() > 2047 or (q.sum(2) != 1024).any():
+        raise Refused('hue sectors must be 12 matrices of 3x3 (Q10, |value| <= 2047, rows summing to 1024)')
+    out = [(o, a, b, 'hue sectors') for o, a, b in HUE['fixed']]
+    off, old = HUE['matrices']
+    copies = len(old) // 2 // (12 * 9 * 4)
+    table = np.repeat(q[:, None], copies, axis=1).astype('<i4').tobytes()
+    if len(table) * 2 != len(old):
+        raise Refused('internal: hue-sector data size')
+    out.append((off, old, table.hex(), 'hue sectors'))
+    return out
+
+
 def all_changes(look):
     fixed = [(o, a, b, 'make the look slot available with its colour processing and defaults')
              for o, a, b in DATA['fixed']]
-    return fixed + look_changes(look)
+    return fixed + look_changes(look) + hue_changes(look)
 
 
 def make_firmware(source, look, log=print):
@@ -371,7 +400,9 @@ def identify(data, log=print):
     fixed_ok = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in DATA['fixed'])
     if fixed_ok:
         m = struct.unpack_from('<9h', payload, LOOK['matrix'][0])
-        log(f'file     a GR4-LUTSmith firmware (look matrix {[list(m[i:i + 3]) for i in (0, 3, 6)]})')
+        hue = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in HUE['fixed'])
+        log(f'file     a GR4-LUTSmith firmware (look matrix {[list(m[i:i + 3]) for i in (0, 3, 6)]}; '
+            f'hue sectors: {"yes" if hue else "no"})')
         return 0
     log('file     unknown - not the official 1.11 file and not made by GR4-LUTSmith')
     return 1
@@ -567,11 +598,14 @@ def exported(curves):
     return [np.minimum(np.array(s) >> 4, 1023) for s in src]
 
 
-def render(v, look):
+def render(v, look, bounds=None):
     """Linear signal (N,3, index units) -> what the camera writes (0..1), firmware-exact curves."""
     import numpy as np
     M = np.array(look['matrix_q13'], float) / 8192
     z = v @ M.T
+    q = (look.get('hue_sectors') or {}).get('matrices_q10')
+    if q:
+        z = hue_apply_q(z, np.array(q), HUE_BOUNDS if bounds is None else bounds)
     ex = exported(look.get('curves'))
     return np.stack([np.interp(np.clip(z[:, c], 0, 255), np.arange(256.), ex[c]) / 1023 for c in range(3)], 1)
 
@@ -715,6 +749,234 @@ class Fitter:
                     curves=[Ck[k].tolist() for k in self.chan], history=hist)
 
 
+# ------------------------------------------------------------------ hue sectors
+# The camera can change colours separately in 12 ranges of hue, each with its own 3x3 matrix, after the
+# look matrix and before the tone curves. The fit keeps neighbouring sectors joined (no gaps between
+# colours) and greys unchanged, and keeps colours near a sector edge smooth (HUE_BUDGET).
+HUE_BOUNDS = [359.8, 27.4, 62.2, 92.6, 112.0, 142.8, 179.2, 211.4, 238.6, 267.2, 306.0, 326.5]
+HUE_SIGMA = [1.0, 2.5, 2.5, 1.0, 1.0, 2.5, 2.5, 2.0, 1.0, 2.0, 5.0, 3.0]
+HUE_YCC = [[77, 150, 29], [-43, -85, 128], [128, -107, -21]]          # /256
+HUE_KINKS = (0.3, 1, 3, 10, 30, 100)          # seam penalty, weakest first; the first within budget is used
+HUE_BUDGET = dict(photo_p99=0.3, photo_max=1.0, lattice_p99=1.0)
+HUE_PHOTO_WEIGHTS = (0.5, 2.0, 8.0)          # weights tried for the photo
+HUE_RIDGE, HUE_LIMIT, HUE_RANGE = 0.02, 1.85, 1e3   # size penalty; matrix range limit
+
+
+def _ycc():
+    import numpy as np
+    S = np.array(HUE_YCC, float) / 256
+    return S, np.linalg.inv(S)
+
+
+def hue_coords(z, bounds):
+    """Sector index and position within the sector for each colour z (N,3)."""
+    import numpy as np
+    S, _ = _ycc()
+    bounds = np.asarray(bounds, float)
+    ycc = z @ S.T
+    ang = np.degrees(np.arctan2(ycc[:, 2], ycc[:, 1])) % 360
+    g = np.argmin((ang[:, None] - bounds[None, :]) % 360, 1)
+    th0, th1 = np.radians(bounds[g]), np.radians(bounds[(g + 1) % 12])
+    det = np.cos(th0) * np.sin(th1) - np.sin(th0) * np.cos(th1)
+    cb, cr = ycc[:, 1], ycc[:, 2]
+    return g, (cb * np.sin(th1) - cr * np.cos(th1)) / det, (cr * np.cos(th0) - cb * np.sin(th0)) / det
+
+
+def hue_matrices(D, bounds=None):
+    """Per-sector 3x3 matrices for the parameters D (12,3)."""
+    import numpy as np
+    S, _ = _ycc()
+    bounds = HUE_BOUNDS if bounds is None else bounds
+    out = []
+    for g in range(12):
+        th0, th1 = np.radians(bounds[g]), np.radians(bounds[(g + 1) % 12])
+        U = np.array([[np.cos(th0), np.cos(th1)], [np.sin(th0), np.sin(th1)]])
+        out.append(np.eye(3) + np.stack([D[g], D[(g + 1) % 12]], 1) @ np.linalg.inv(U) @ S[1:])
+    return np.array(out)
+
+
+def hue_quantise(mats):
+    import numpy as np
+    q = np.rint(mats * 1024).astype(int)
+    for g in range(12):
+        for r in range(3):
+            q[g, r, r] += 1024 - q[g, r].sum()
+    if np.abs(q).max() > 2047:
+        raise Refused(f'hue-sector matrix value {np.abs(q).max()} is out of range')
+    return q
+
+
+def hue_apply_q(z, q, bounds):
+    import numpy as np
+    g, _, _ = hue_coords(z, bounds)
+    return np.einsum('nij,nj->ni', q[g] / 1024, z)
+
+
+def hue_kinks():
+    """Linear map from the parameters to the smoothness penalty at each sector edge."""
+    import numpy as np
+    _, S_inv = _ycc()
+    th = np.radians(HUE_BOUNDS)
+    perp = (S_inv @ np.stack([np.zeros_like(th), -np.sin(th), np.cos(th)])).T
+    cols = []
+    for k in range(36):
+        e = np.zeros(36)
+        e[k] = 1
+        M = hue_matrices(e.reshape(12, 3))
+        cols.append(np.concatenate([(M[b] - M[b - 1]) @ perp[b] for b in range(12)]))
+    return np.array(cols).T * np.repeat(HUE_SIGMA, 3)[:, None]
+
+
+class HueFitter:
+    """Adam on the same loss as Fitter, with the look's matrix and curves fixed; parameters D (12,3)."""
+
+    def __init__(self, v, target, weight, look):
+        import numpy as np
+        self.f = Fitter(v, target, look['curve_mode'] if look.get('curves') else 'single', weight=weight)
+        M = np.array(look['matrix_q13'], float) / 8192
+        self.z = v @ M.T
+        self.g, self.a, self.b = hue_coords(self.z, HUE_BOUNDS)
+        cv = look.get('curves')
+        self.C = np.array(cv, float) / 16384 if cv else np.tile(np.arange(256) / 256.0, (3, 1))
+        K = hue_kinks()
+        self.KtK = K.T @ K
+        self.B = np.array([hue_matrices(e.reshape(12, 3)).ravel() - hue_matrices(np.zeros((12, 3))).ravel()
+                           for e in np.eye(36)]).T
+        self.M0 = hue_matrices(np.zeros((12, 3))).ravel()
+        self.kink = HUE_KINKS[0]
+
+    def loss_grad(self, D):
+        import numpy as np
+        f = self.f
+        z = self.z + self.a[:, None] * D[self.g] + self.b[:, None] * D[(self.g + 1) % 12]
+        zc = np.clip(z, 0, 255)
+        i = np.minimum(np.floor(zc).astype(int), 254)
+        fr = zc - i
+        bb = f.T[i] * (1 - fr) + f.T[i + 1] * fr
+        mz = (z > 0) & (z < 255)
+        idx = np.clip(bb * 256, 0, 255)
+        j = np.minimum(np.floor(idx).astype(int), 254)
+        gg = idx - j
+        rows = np.arange(3)[None, :]
+        c0, c1 = self.C[rows, j], self.C[rows, j + 1]
+        out = c0 * (1 - gg) + c1 * gg
+        mi = (bb * 256 > 0) & (bb * 256 < 255)
+        x = np.clip(out, 0, 1)
+        lin = np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4)
+        dlin = np.where(x <= 0.04045, 1 / 12.92, 2.4 / 1.055 * ((x + 0.055) / 1.055) ** 1.4) * ((out > 0) & (out < 1))
+        t = lin @ np.array(XYZ).T / np.array(WHITE)
+        big = t > 216 / 24389
+        F = np.where(big, np.cbrt(np.maximum(t, 1e-12)), (24389 / 27 * t + 16) / 116)
+        dF = np.where(big, 1 / 3 * np.maximum(t, 1e-12) ** (-2 / 3), 24389 / 27 / 116)
+        lp = np.stack([116 * F[:, 1] - 16, 500 * (F[:, 0] - F[:, 1]), 200 * (F[:, 1] - F[:, 2])], 1)
+        d = lp - f.lt
+        dL, dC, dH = d[:, 0], (d[:, 1:] * f.u).sum(1), (d[:, 1:] * f.h).sum(1)
+        e = np.sqrt((dL / f.SL) ** 2 + (dC / f.SC) ** 2 + (dH / f.SH) ** 2 + 1e-8)
+        loss = (f.w * e).sum()
+        w = f.w / (2 * e)
+        gLab = np.concatenate([(w * 2 * dL / f.SL ** 2)[:, None],
+                               (w * 2)[:, None] * ((dC / f.SC ** 2)[:, None] * f.u + (dH / f.SH ** 2)[:, None] * f.h)], 1)
+        gout = ((gLab @ np.array([[0, 116, 0], [500, -500, 0], [0, 200, -200]], float)) * dF / np.array(WHITE)
+                @ np.array(XYZ)) * dlin
+        gz = gout * (c1 - c0) * mi * 256 * f.Tslope[i] * mz
+        gD = np.zeros((12, 3))
+        np.add.at(gD, self.g, self.a[:, None] * gz)
+        np.add.at(gD, (self.g + 1) % 12, self.b[:, None] * gz)
+        dv = D.ravel()
+        pen = self.kink * (dv @ self.KtK @ dv) / 12 + HUE_RIDGE * (dv @ dv) / 12
+        gpen = self.kink * 2 / 12 * (self.KtK @ dv) + HUE_RIDGE * 2 / 12 * dv
+        mv = self.M0 + self.B @ dv
+        over = np.maximum(np.abs(mv) - HUE_LIMIT, 0)
+        pen += HUE_RANGE * (over ** 2).sum()
+        gpen += self.B.T @ (HUE_RANGE * 2 * over * np.sign(mv))
+        return loss + pen, loss, gD + gpen.reshape(12, 3)
+
+    def run(self, iters=800, lr=0.02):
+        import numpy as np
+        D = np.zeros((12, 3))
+        m1, m2 = np.zeros_like(D), np.zeros_like(D)
+        for it in range(iters):
+            total, loss, gD = self.loss_grad(D)
+            a = lr * 0.5 * (1 + math.cos(math.pi * it / iters))
+            m1 = 0.9 * m1 + 0.1 * gD
+            m2 = 0.999 * m2 + 0.001 * gD ** 2
+            D -= a * (m1 / (1 - 0.9 ** (it + 1))) / (np.sqrt(m2 / (1 - 0.999 ** (it + 1))) + 1e-8)
+        return D
+
+
+def hue_seam_risk(look, y, held):
+    """How much colours near sector edges could change (ΔE00), to keep them smooth."""
+    import numpy as np
+    out = {}
+    for name, pts in (('lattice', y), ('photo', held[0] if held else None)):
+        if pts is None:
+            continue
+        v = to_index(pts)
+        nom = lab(np.clip(render(v, look), 0, 1))
+        e = np.max([de00(nom, lab(np.clip(render(v, look, np.array(HUE_BOUNDS) + sg * np.array(HUE_SIGMA)), 0, 1)))
+                    for sg in (-1, 1)], 0)
+        out[name] = dict(p99=round(float(np.percentile(e, 99)), 3), max=round(float(e.max()), 3))
+    return out
+
+
+def hue_within_budget(sr):
+    ok = sr['lattice']['p99'] <= HUE_BUDGET['lattice_p99']
+    if 'photo' in sr:
+        ok = ok and sr['photo']['p99'] <= HUE_BUDGET['photo_p99'] and sr['photo']['max'] <= HUE_BUDGET['photo_max']
+    return ok
+
+
+def more_levers_ok(new, old):
+    """Accept more levers only for a clear gain (whole range or ColorChecker) with nothing worse."""
+    def f(s):
+        return dict(e=s['e'], cc=s['cc'], grey=s['grey'], h=s.get('h'))
+    n, o = f(new), f(old)
+    gain = n['e'] < o['e'] * (1 - PAIR_GAIN) or n['cc'] < o['cc'] * (1 - PAIR_GAIN)
+    no_worse = ((o['h'] is None or n['h'] <= o['h'] + HELD_TOL) and n['grey'] <= o['grey'] + GREY_TOL
+                and n['cc'] <= o['cc'] + CC_TOL and n['e'] <= o['e'] * (1 + RANGE_TOL))
+    return gain and no_worse
+
+
+def fit_hue(look, v, t, weight, n_lut, y, ty, held, lut, space, iters=800, log=print):
+    """Hue sectors on top of a fitted look (matrix and curves kept). Returns the hue_sectors data
+    to add to the look, or None when they do not clearly help."""
+    import numpy as np
+
+    def summary(lk):
+        ev = everyday(lk, lut, space)
+        return dict(e=evaluate(lk, y, ty)['de00_mean'], cc=ev['colorchecker']['de00_mean'],
+                    grey=ev['greys']['de00_mean'], h=evaluate(lk, *held)['de00_mean'] if held else None)
+    base = summary(look)
+    candidates = []
+    for pw in (HUE_PHOTO_WEIGHTS if held else HUE_PHOTO_WEIGHTS[:1]):
+        w = np.asarray(weight, float).copy()
+        w[n_lut:] *= pw / PHOTO_WEIGHT
+        hf = HueFitter(v, t, w / w.sum(), look)
+        for kink in HUE_KINKS:
+            hf.kink = kink
+            D = hf.run(iters)
+            try:
+                q = hue_quantise(hue_matrices(D))
+            except Refused:
+                continue
+            cand = dict(look, hue_sectors=dict(matrices_q10=q.tolist()))
+            sr = hue_seam_risk(cand, y, held)
+            if not hue_within_budget(sr):
+                continue
+            s = summary(cand)
+            ok = more_levers_ok(s, base)
+            log(f'  hue     ΔE00 {s["e"]:.3f}' + (f'  photo {s["h"]:.3f}' if s['h'] is not None else '')
+                + f'  ColorChecker {s["cc"]:.3f}  greys {s["grey"]:.3f}' + ('' if ok else '  (not better)'))
+            if ok:
+                candidates.append((s['e'], dict(matrices_q10=q.tolist(), photo_weight=pw, seam_weight=kink,
+                                                seam_risk=sr)))
+            break
+    if not candidates:
+        log('  hue sectors: no clear gain, not used')
+        return None
+    return min(candidates, key=lambda c: c[0])[1]
+
+
 # ------------------------------------------------------------------ scoring
 HUES = {'red': (330, 30), 'orange/skin': (30, 75), 'yellow': (75, 105), 'green': (105, 180),
         'cyan': (180, 240), 'blue': (240, 290), 'purple/magenta': (290, 330)}
@@ -837,7 +1099,7 @@ def everyday(look, lut, space):
     return out
 
 
-def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print):
+def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print, hue=True):
     import numpy as np
     lut = Lut(path)
     if lut.lo.tolist() == [0, 0, 0] and lut.hi.tolist() == [1, 1, 1]:
@@ -901,6 +1163,10 @@ def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print)
     else:
         use = one(curve)
     look = use['look']
+    if hue:
+        sectors = fit_hue(look, v, t, weight, len(y) + len(gy), y, ty, held, lut, space, log=log)
+        if sectors:
+            look = dict(look, hue_sectors=sectors)
     scores = dict(fit=evaluate(look, y, ty), unchanged=unchanged(y, ty), **everyday(look, lut, space))
     if held:
         scores['photo'] = evaluate(look, *held)
@@ -909,6 +1175,7 @@ def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print)
     return dict(tool=f'GR4-LUTSmith {VERSION}', lut=dict(file=str(Path(path).resolve()), sha256=lut.sha256, kind=lut.kind,
                                                           title=lut.title, space=space),
                 matrix_q13=look['matrix_q13'], curve_mode=look['curve_mode'], curves=look['curves'],
+                hue_sectors=look.get('hue_sectors'),
                 scores=scores, decision=dict(build=ok, reason=why), fit=dict(iters=iters, history=look['history']))
 
 
@@ -944,7 +1211,8 @@ def describe(look, log=print):
     if cc and gr:
         log(f'  everyday colours: ColorChecker ΔE00 {cc["de00_mean"]} (skin {cc["skin"]}, worst {cc["worst"]}); '
             f'greys {gr["de00_mean"]} (largest cast {gr["cast_max"]})')
-    log(f'  curves: {look["curve_mode"]}; decision: {look["decision"]["reason"]}')
+    hs = look.get('hue_sectors')
+    log(f'  curves: {look["curve_mode"]}; hue sectors: {"yes" if hs else "no"}; decision: {look["decision"]["reason"]}')
 
 
 def load_look(path):
@@ -1005,6 +1273,7 @@ def main(argv=None):
                        help='colour space the LUT was made for (default srgb)')
         p.add_argument('--photo', type=Path, help='a DNG from your GR IV: judges the fit on real content (needs rawpy)')
         p.add_argument('--curve', choices=('auto', 'single', 'pair', 'rgb'), default='auto', help=argparse.SUPPRESS)
+        p.add_argument('--no-hue', action='store_true', help='do not use hue sectors (colour changes per hue)')
         p.add_argument('--iters', type=int, default=1500, help=argparse.SUPPRESS)
     m = sub.add_parser('make', help='LUT + official firmware -> firmware with the look')
     lut_args(m)
@@ -1057,7 +1326,7 @@ def main(argv=None):
                     make_firmware(source, dict(matrix_q13=[[8192, 0, 0], [0, 8192, 0], [0, 0, 8192]]))
                 if (out_dir / 'fwdc248b.bin').exists():
                     raise Refused(f'{out_dir / "fwdc248b.bin"} already exists; choose another output directory')
-            look = fit_lut(a.lut, a.space, a.curve, a.photo, a.iters)
+            look = fit_lut(a.lut, a.space, a.curve, a.photo, a.iters, hue=not a.no_hue)
             describe(look)
             out_dir.mkdir(parents=True, exist_ok=True)
             (out_dir / 'look.json').write_text(json.dumps(look, indent=1) + '\n')

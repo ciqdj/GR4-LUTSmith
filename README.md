@@ -19,16 +19,19 @@ look, on your own computer.
 ## How it works
 
 The GR IV does not run LUTs directly. Its looks are built from a few native
-controls: a colour mix, tone curves and contrast settings. GR4-LUTSmith
+controls: a colour mix, tone curves, contrast settings and **hue sectors**
+(separate colour changes for 12 ranges of hue). GR4-LUTSmith
 **fits** your LUT to those controls, measures how close the camera can get, and
 only then writes the firmware.
 
 - **Tonal and overall colour looks** fit very well. That covers film-style
   curves, contrast, faded blacks, warm or cool casts, and overall saturation
   changes.
-- **Looks that move single hues separately** can only be approximated. That
-  covers teal-orange, skin-tone protection, and "this green only". The tool
-  tells you when that is the case.
+- **Looks that move single hues separately** (teal-orange, film simulations
+  that shift greens or skies, …) are fitted with the **hue sectors**. They get
+  much closer than with the colour mix alone. Changes that depend strongly on
+  how saturated a colour is (e.g. only the most vivid reds) remain approximate,
+  and the tool tells you when that is the case.
 - **Log and camera-specific conversion LUTs** (S-Log, V-Log, …) are not
   supported. Use a "creative" LUT made for normal (Rec.709 / sRGB) pictures.
 
@@ -111,7 +114,8 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
 The tool:
 
 1. makes sure you gave it the genuine official 1.11 file;
-2. fits the LUT (this takes one to three minutes) and shows how well it fits;
+2. fits the LUT (this takes a few minutes, plus a minute or two for the hue
+   sectors) and shows how well it fits;
 3. builds the firmware and checks it.
 
 A good run ends like this:
@@ -171,6 +175,19 @@ file and install it the same way.
 Repeat steps 4–5 with the **official** `fwdc248b.bin` from RICOH instead. The
 camera again shows **1.11 → 1.11**; confirm it, and your camera is back to stock.
 
+## Hue sectors
+
+After fitting the colour mix and tone curves, the tool tries to improve the look
+with **hue sectors**: the camera can change colours separately in 12 ranges of
+hue. They are kept **only when they clearly help** (the whole colour range or the
+ColorChecker improves by at least 10 %) **and nothing gets worse** (your photo,
+the greys, the ColorChecker). The result line says `hue sectors: yes` or `no`.
+
+- Greys are never changed by the hue sectors, and neighbouring sectors always
+  meet without a gap, so colours stay smooth from one hue to the next.
+- With `--photo` the hue sectors are tuned for real content too (recommended).
+- `--no-hue` turns them off (`make` and `fit`).
+
 ## When a LUT is "poor"
 
 Many film-simulation LUTs reshape very saturated colours in ways the camera's
@@ -215,6 +232,7 @@ The tool says which rule applied. Otherwise it writes no firmware; add
   result with the tested build. It prints `selftest: PASSED`.
 - `uv run gr4_lutsmith.py fit my_look.cube --photo R0001234.DNG` fits and
   reports without needing the firmware file, so you can try many LUTs first.
+- `check` also tells you whether a GR4-LUTSmith firmware uses hue sectors.
 
 ## Without uv
 
@@ -245,7 +263,8 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | The five monochrome looks | tested on a GR IV 1.11 (see GR4-MonoUnlock) |
 | Keeping the slot's own "High Contrast" name and icon | the name and icon are RICOH's own, unchanged; this exact combination has not been installed yet |
 | Sliders opening at 0 (grain off) | made of the same changes as the tested build (a subset of them); not installed on its own yet |
-| Looks that need two or three tone curves (colour casts, toned looks) | built and checked on the computer; not yet installed |
+| Looks that need two or three tone curves (colour casts, toned looks) | three curves tested on a GR IV 1.11 |
+| Hue sectors | tested on a GR IV 1.11 in RAW Development with a film-simulation LUT (ISO 200, a daylight scene of greens and yellows): the camera matched the tool's prediction, the difference to the LUT fell by about 30 % on coloured areas, and no gaps between colours were visible. Reds, blues, purples and higher ISO have not been checked on the camera yet |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files
