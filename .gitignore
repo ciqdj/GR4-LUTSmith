@@ -9,6 +9,7 @@ __pycache__/
 *.DNG
 .venv/
 .uv-cache/
+CLAUDE.md
 # Example LUTs: only the bundled synthetic example is published (others may be third-party)
 /examples/*
 !/examples/film-1d.cube

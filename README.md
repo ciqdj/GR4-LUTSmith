@@ -65,7 +65,8 @@ After installing, the Image Control list ends like this:
 | HDR Tone | Monochrome HDR *(experimental)* | ✓ | |
 
 - Your look uses the name and icon of **High Contrast** (the fourth entry after
-  the first "HDR Tone").
+  the first "HDR Tone"). You can choose **Cinema (Yellow)** or **Cinema (Green)**
+  instead, or use several of them: see [Choosing the slot](#choosing-the-slot).
 - It opens with **every slider at 0**, sharpness at its standard value and
   **grain off**. Your LUT's look is built in at those settings; the sliders then
   work as usual, starting from your look.
@@ -110,6 +111,9 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
 
 - Add `--space adobe` if the LUT was made for Adobe RGB.
 - `--photo` is optional, but recommended.
+- `--slot vivid`, `--slot cinema-yellow`, … (optional) puts your look in place
+  of another look instead of High Contrast. `uv run gr4_lutsmith.py slots`
+  lists them all: see [Choosing the slot](#choosing-the-slot).
 - `--turns 3` (optional) runs three fits and keeps the best ones: see
   [More turns](#more-turns).
 - `--after-curves` is optional: see [Colour after the curves](#colour-after-the-curves).
@@ -128,7 +132,12 @@ A good run ends like this:
   on your photo: ΔE00 1.22 (without the look 2.55)
   ...
 wrote output/my_look/fwdc248b.bin  (SHA-256 …)
+Copy this file to the root of the SD card and run the camera's firmware update.
+Then choose High Contrast in Image Control: your look is there.
 ```
+
+The tool also says at the start which slot your look goes to, for example
+`slot: High Contrast (replaces the hidden monochrome High Contrast look)`.
 
 The output folder `output/my_look/` also contains `look.json` (the fitted
 look) and can take a preview (step 3).
@@ -165,7 +174,8 @@ tone are what to compare. Sharpening and noise are not simulated.
 ### 6. Shoot
 
 - Open **Image Control** and choose **High Contrast** (after the first
-  "HDR Tone"). It is in colour now.
+  "HDR Tone"). It is in colour now. If you chose another slot with `--slot`,
+  choose that entry instead.
 - The firmware version still shows **1.11**. That is normal.
 - Delete `fwdc248b.bin` from the card (or format the card) so the update is not
   started again by accident.
@@ -272,6 +282,62 @@ the curves was better on average. So both help, but **more turns of the usual
 fit give the larger gain**: if you have time, run more turns first, and add
 `--after-curves` when you also want to compare that version.
 
+## Choosing the slot
+
+Your look replaces one of the camera's looks. You choose which one with
+`--slot` (`make` and `fit`); `uv run gr4_lutsmith.py slots` shows the same list
+in the terminal:
+
+| `--slot` | Shown as | Replaces | Still | Movie | Extra sliders |
+| --- | --- | --- | :---: | :---: | --- |
+| `high-contrast` (default) | High Contrast | the hidden monochrome High Contrast look | ✓ | ✓ | — |
+| `cinema-yellow` | Cinema (Yellow) | RICOH's Cinema (Yellow) look | ✓ | ✓ | Saturation, Hue |
+| `cinema-green` | Cinema (Green) | RICOH's Cinema (Green) look | ✓ | ✓ | Saturation, Hue |
+| `vivid` | Vivid | RICOH's Vivid look | ✓ | ✓ | Saturation, Hue |
+| `positive-film` | Positive Film | RICOH's Positive Film look | ✓ | ✓ | Saturation, Hue |
+| `negative-film` | Negative Film | RICOH's Negative Film look | ✓ | ✓ | Saturation, Hue |
+| `bleach-bypass` | Bleach Bypass | RICOH's Bleach Bypass look | ✓ | ✓ | Saturation, Hue |
+| `retro` | Retro | RICOH's Retro look | ✓ | ✓ | Saturation, Hue |
+| `soft-monotone` | Soft Monotone | RICOH's Soft Monotone look | ✓ | | — |
+| `hard-monotone` | Hard Monotone | RICOH's Hard Monotone look | ✓ | ✓ | — |
+| `hi-contrast-bw` | Hi-Contrast B&W | RICOH's Hi-Contrast B&W look | ✓ | ✓ | — |
+| `mono-standard` | Standard (the second one) | the hidden monochrome Standard look | ✓ | ✓ | — |
+| `mono-soft` | Soft | the hidden monochrome Soft look | ✓ | | — |
+| `mono-solid` | Solid | the hidden monochrome Solid look | ✓ | ✓ | — |
+
+- The colours are the same in every slot: the camera processes your look the
+  same way there, so the fit and its scores do not change with the slot.
+- Your look opens with every slider at 0 and grain off, in every slot.
+- What changes with the slot is only which entry you lose and which sliders
+  you get. On a monochrome slot your look is in colour; Saturation and Hue are
+  not offered there.
+- **Cinema:** its Color Tone setting has no effect on your look.
+  **Bleach Bypass:** its tone setting does not change your look.
+  **Retro:** Retro's own toning and vignette-like tone effect are removed, so
+  you get your look only.
+- A slot you do not use keeps RICOH's look. Without a look on High Contrast, it
+  stays the monochrome High Contrast look.
+- **Not available:** Standard, Monotone, HDR Tone, Cross Processing and the
+  hidden Grainy and HDR looks. These share parts of their processing with other
+  looks or use special processing that would change your colours.
+- **Several looks in one firmware:** make one look per slot with `fit`, then
+  build them together:
+
+  ```sh
+  uv run gr4_lutsmith.py fit look_a.cube --slot cinema-yellow --photo R0001234.DNG -o output/a
+  uv run gr4_lutsmith.py fit look_b.cube --slot vivid         --photo R0001234.DNG -o output/b
+  uv run gr4_lutsmith.py build output/a/look.json output/b/look.json ~/Downloads/fwdc248b.bin -o output/both
+  ```
+
+- **How many at once:** High Contrast and the two Cinema slots always take a
+  full look. The other slots share a limited amount of room: each look needs
+  room for its tone curves, and much more for hue sectors and colour after the
+  curves. A simple look (one tone curve) fits on up to 10 of them at once;
+  looks with hue sectors fit on far fewer. If they do not fit, the tool says so
+  and writes nothing; use fewer slots or simpler looks, and leave High Contrast
+  unused for the most room.
+- `check` lists which slots carry a personal look.
+
 ## When a LUT is "poor"
 
 Many film-simulation LUTs reshape very saturated colours in ways the camera's
@@ -291,7 +357,8 @@ The tool says which rule applied. Otherwise it writes no firmware; add
 
 - **The sliders** (Key, Contrast, Highlight, Shadow, Sharpness, Shading,
   Clarity, Toning, Grain) work on top of your look; at 0 you get the LUT.
-  Saturation and Hue are not offered for this slot.
+  Saturation and Hue are not offered on High Contrast; on the Cinema slots they
+  are (see [Choosing the slot](#choosing-the-slot)).
 - **Two "Standard" and two "HDR Tone" entries.** The monochrome Standard and HDR
   looks use the same names and icons as the colour ones.
 - **An official RICOH update removes your look.** It replaces the whole
@@ -351,6 +418,8 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | Looks that need two or three tone curves (colour casts, toned looks) | three curves tested on a GR IV 1.11 |
 | Hue sectors | tested on a GR IV 1.11 in RAW Development with a film-simulation LUT (ISO 200, a daylight scene of greens and yellows): the camera matched the tool's prediction, the difference to the LUT fell by about 30 % on coloured areas, and no gaps between colours were visible. Reds, blues, purples and higher ISO have not been checked on the camera yet |
 | Colour after the curves (`--after-curves`, optional) | 
+| Looks on the Cinema (Yellow) / Cinema (Green) slots | tested on a GR IV 1.11: works |
+| Looks on the other slots (Vivid, Positive Film, Negative Film, Bleach Bypass, Retro, the monochrome slots) | tested on a GR IV 1.11: works |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files

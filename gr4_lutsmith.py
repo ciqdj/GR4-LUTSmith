@@ -9,10 +9,12 @@ are run and the good ones kept. Starts from the official RICOH firmware file
 you downloaded yourself. A file is written only if every check passes.
 
 Usage
-  python3 gr4_lutsmith.py make     LUT.cube OFFICIAL_fwdc248b.bin [--space srgb|adobe] [--photo DNG] [--no-hue] [--after-curves] [--turns N] [--seed S] [-o DIR]
-  python3 gr4_lutsmith.py fit      LUT.cube [--space srgb|adobe] [--photo DNG] [--no-hue] [--after-curves] [--turns N] [--seed S] [-o DIR]   (no firmware needed)
-  python3 gr4_lutsmith.py build    DIR/look.json OFFICIAL_fwdc248b.bin [-o DIR]
+  python3 gr4_lutsmith.py make     LUT.cube OFFICIAL_fwdc248b.bin [--space srgb|adobe] [--slot SLOT] [--photo DNG] [--no-hue] [--after-curves] [--turns N] [--seed S] [-o DIR]
+  python3 gr4_lutsmith.py fit      LUT.cube [--space srgb|adobe] [--slot SLOT] [--photo DNG] [--no-hue] [--after-curves] [--turns N] [--seed S] [-o DIR]   (no firmware needed)
+  python3 gr4_lutsmith.py build    DIR/look.json [DIR2/look.json ...] OFFICIAL_fwdc248b.bin [-o DIR]
+                                   (one look per slot: high-contrast, cinema-yellow, cinema-green)
   python3 gr4_lutsmith.py preview  DIR/look.json PHOTO.DNG [-o sheet.jpg]   (needs rawpy, pillow)
+  python3 gr4_lutsmith.py slots                                   (the looks yours can replace)
   python3 gr4_lutsmith.py check    ANY_fwdc248b.bin
   python3 gr4_lutsmith.py selftest OFFICIAL_fwdc248b.bin
 
@@ -28,7 +30,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -262,33 +264,332 @@ beiFUHHje8SVci+fS1peSz+mFxiZZ4urloQ8gl5fKKiDUAq2vGdqA1MKzjmKrCnK8XhTnI8DmmJC8tBc
 '''
 POST = json.loads(zlib.decompress(base64.b64decode(''.join(_POST.split()))))
 
+# Other slots for a personal look: the changes for each slot and the room for the looks' data, all with their
+# original bytes, which are checked.
+_SLOTS = '''
+eNrtve2uHTluLnwv/u0B9FX6yK0EjUBSSRkjnfag2zOTvAdz7y/JEsUt2nvv7sRBDnDswvJaNqtUVfqgSOl5yP/z4befP3/57cM//Z8P
+/dMv49/rn/5z/Pzz57/jf/yKXzZ//HCPWf/6M571z/98XcaHED5+iNPYHsf1AX+m5+dPHx95ih8/pL7lqZ/y6OD6EjvLSzzlycBNqy8s
+r/6QB4ty24xbctuSeyl3l/v4weUtd/mU+wLPF1xneXCnPGQoP8yy5fOU5wLl97TL7+mUF3y/O2z5HQ75ZSLIx9j3H+OUw+N8/DDbvv88
+3++KVL/eeK5fn/xLOdVfNluezSnPF1xfamd5qae8BAOVngrLazrkiZ7fjXFx/Y50HXKsX1+33NdT7rD/XK6zHF74kPsAz3+NsuWqfOo/
+VcqvqvyE9dfilrd4yrOD9+tj37+f5WeD73/Xff/7LD877B8ujsjvDw3yUu6xfO+23LtTHjI8f6id5aGe8ovqJxaWX6p8ev4q5VdVfsb+
+X4fIxyEvxuD7x33/HpUc3+92+/73Ub51Ba+/2uj8fC31Q+7h/jFvecyH3FP52XWWZ3fKbYTy8yxbPk/5hdebNO4lhxa/X8oT3t+GLbfh
+lGccP270W/rvIS8Z268Vlvt2yEPA929+l9+8kuP9u9nybk75he1/131/6F+HPGH7j7TvP873u5zB/jFBg6z6n2kccg/vF/uWx37KPd4/
+wwlcv/GUhwj1W3xhefGHPEaL9Vuj6ddTvzU9P1mOz+/ilsP4OOQJ9acfneV+nPJM+rkWloez/GSxfxcpv5zlg2ak8bHlMD5OOeqXVvf9
+myr/wvfvcd+/q/ITyq2Llt/fJftSnvH+doh8nPKC+tPj/LfePx5ymLgMTkqF5eEsH/QPtp+Un8/yMwwgVOpbDvr9kAfU/83t+zdV/oX1
+28a+fzvKd87h9SGZxM8HGveQ4/i8wpZf4ZQHLD+OzvI4TvmF+j21wvLUTnnB6yf0miWf/pB7mn+MGXnJDaj8l3KH+t3WnqX/HnJP/TcV
+lrt0yhP1vxlZXqaSY/uAemd57ae84PgE7Zulf72Uh0f/+n3/25/yC/tvaLFw/bdUDjnqrytv+ZVPeXJwPZgULE/ulGcc32mWLZ+H/Co4
+v4IR0Lh+Y2ov5NGgfrJuy2F8HHIav652lrt6yql/+ViajI9DfjmaP3b5WZVP9lEeIh+nPJH9EPf9qyq/4PzT3L5/O8tPFut3SvnzLD85
+rD9TQ+f6qam/lHu83uH8t97fnfLgaX4qWz5OeUL9kqT8pMqn+S/HLQf9fsgzth9od5YXVT7pp1r3/etRvofXR/3lwYILT/v49PxkOT5/
+MFsOmuCQF2yfq3aWX/WQO7IvcZZY8phOeUD5PXf59zzlEe1fMO9YDprmkCesfxPB/g3cf/1Lecb+BWYAy9GieCGHB8D+1y6W53bKqX1L
+3vKST3lw1L/2/aF/HfKI9dfmvn+bhxwcC7g/aKHA9Z9SOOTYf0PY8hBOOfXPa3SWg319yGn+jK2wPLZDfpF/NN11LflE+/2F/HI0PkQ+
+Tnmk+RPtz1W/aH++kJP97tD+DDw+XsqjIftyXCyP45TT+Ex1y1M95Q7rD70rbh9VPvm3Zez7F1V+xPcfUv5Q5Sd6/7jl83w/uBzKNzj/
+rf6H898LecH721pYDvPTS3lyqL9ivFgOCu+Uo/6Ev1kO+v2Qk/2a675/VuWHQvbVvn/Z5f/08cO/1y+/fvqPD//0z2CHgSbCpsoGbAqY
+ZOFj8GOMvbsBK+b5A+aQzVD2h/7XX/82/uW3v3/60v9MBfhUqK8aa6yc8JfPn375Mn79TU6B120wK6Jn1MKEO9H3wG+57G8VLwimwPQF
+tuFH+mki2JPPT7iHMXw2rWVYeGL7GFPgTO9PgA/0sVzhMwyoAfjA7+rg04xvFzjWFj4gu28DboDxcxoPfk1woBr9NAFc8JCsCXA9+HkG
+NLEJA35bZ8D6Bg/eghfeDDhO5hqgKeHJoh8mxm5g2gPVVE2c8HEN3hHchzzBmHImTfSeK9TDNLmApwflorda/G0KNEZpzhR4ngLnwKRm
+KtjodcAHVGKL2TR4/jamaaAjemqmQ5kd/L37MuaGyrrvaW44d8RhBrznmLcZ4TIzdzPvYKaFF4/BmgrfM2AlWDAXre23tRY8v2tYB3an
+G9M6n8HTstb3Ch6dB6+n2wCyALLgi72ys1fvcFUEj8HYWKuNE/7lJ1jQ1aY7QA+bNsdqQdfCmLYWNJIt0JJlBAvNAuOioxlnqw22RWtb
+HbbNZlsA27WA0Tou232wN5jE9+3s7Rza4nbAY8OT2hnh0+ADGsXgxFPhM0E9B9CRYGXaAR+Y56CPOHfDB2xHHH7w2s5bA5bWcKE2h2tF
+oG/BMgLjFW4EBgpYGTARNaxNGH6XgVkV1AzcNLnicoJu12CamROKjg4sPVducJwttO7VHVSFq3DvCue22F1rxrXpXcM5N4Hn3KrrE2eQ
+291puLtNd0NZuOY0wH0Y8O8B/x5+OvAN3YTnmLO76Zs3qXrToPYmdvbowd3xtnkPVe0tnOFgXoQH8GB0eHgbmI3AIC7T+xtPyh6mFR+K
+8dCnoRdlmA0CaOzpr1b9NUF7Y6mx+VhBk8EQiVB4Qq2SwUzv1cPIgGE2wAkvPkORedweDDhfIsy4pfpyQ+8ww9eQfIUuVKHcOgMMv9u3
+GMEth7eABm3YtUL1PUNztOY7PGLHGonB3wW+oZzbdD/g+cC+8aPB9wCvHZpvXtXPYv3sGYbu9BM1H+iaAs63+V/WBn5pgxu0AWgCuFfs
+oAInfFwBbVDRmTGpgUaYoBHQ2LkaaAML2iCjrgVtkEEbgCaooAmgOxR3gTbwoA1g4A74gIfU4gXaADQCPC80AmiDCtoAvk0DbeBBG8A3
+aKbbdZidQBM00ASgq2cYZpYE2mAa6LvWwGiC3gRP7KwNDYeoBeVvQRWAFobu3qCrg/6HLoMGlfUg8yALIAstQ3WD3oDrLrjuugd4Bhms
+AWtjazZCTaQA2qDAuBjQUd1tc8oWBgtoA9AEV7Klwi1hOBefLPQW0AagEUBvNBjZrd6gDQpogwDawICSAo8Xyr/TRY8IbwQDvNkBFw7Q
+PAMG/czTThBOGHm40AgdyMG8AaoK1EetcAJY9wEGRjGgETr6uqARgvMw4qBWQSNE0Ajg+wz4DUMHXDF39YK1AX5LcxEGVgRZBCsygYWb
+OmgGaNkc4MkKaIUbflsY96BZSoXbgBYAfQFKtcKgBM0whoPxS9XamgOtAB8oq8Ng7fDvDv/uMI7vZNxdQSMM0BCuuRGLg/d0Y0QHOsuB
+5nMwwbh5g3YAHWlgRECn8dT4FgY6LsNlqHToFBbVIoxGBxat66ACjQEb9warv3oPpq+H0QlXeGhTD9rQhwFawqGdB7qzDH+B5sBVlwia
+I4LmiP0GGw40QYigFaAYUG1pdjCyoeeCNsoN5o4BGgLerMQMww00woDuY29f4Tlrib7C7asBTRC6bxm0Qb98gweHce+hL4NGiKARQDOA
+DrxBG901+XvAU9vpoc39gHcFxQNzLoz+0PwEEx0e4dQGmRxFXEhPMKLxGzr8oxWWRijwf+AtwuOBNkigDUArNPjdQTPc8KoDzpnw24AW
+AL8etBhoA9AM8cZdBIMLW6HDZ8Bvc4M2gIaA+R58d9AGoB3uYWCcgjaA0Q/zd0SDBkb5ow3QNrgN2EdgG4CLBf+X3DAZRnYuYBfcHrQB
+zO4wfxd4/tKKKWA/FGxPUMwVtFeF54O+BtoAPhU+8G+YVUyP03SYKvpMMAC6ueG9b7gv6gAwu82A94WeZKDvmAneFEwt8IagBmFEQoHW
+jBsrCmwD1AYwxMFucBHsMpjHYThBV8HmBLsAJmPsOgEmd9CKMIuDXQAWGwxKe80bNANoA3jgCJoh4uyYQAu024LZCWYHWJWgGfKwuCJm
+S5y2gBFQZiclVMEuqb1Y0GugAcAuAA0Al9qGT4MmS4FPh74PWuAGu+KG4Xf3CI8L074HzZCKhenCDniX4aKdYNtMmKRmh29oTZoCIqjg
+Cr9vULf44tDfbBxgO0xnofvZCb9hyLgLhnKGIQcj1IF9gHobmtrBxAna43YeNAZMZs7D6PS4P+Ii2RMwQMDXBDuj3C40sDFu+L8J/4ZW
+onUSmEKgvzj0mK4CehVG/AVq4BrZ4T5SxJJAW8G0CdUPv2uE6R2swYFv5HHWBdsE3Dd4tlRvl0D7JLAbErrAaPbAs+VaHq0ENhI0BWgm
+0I0ZPqB6CjwLmDxgswRXM2ipBhoKTD+4AzQ16J0SXOvwDb21434YGLGP7VIf2yWjEoWZHZ5lQLkDngFsTjcC2C2gdCbYVRM3DECrQC+H
+jhBAI0GHAd0K9QkXNXhp82ghaJGQqw8zgibyoHVA+8DkHZslEyaB1gCLGDTM9BnslAx2DtiRMOeDVrnB1oD7NNB2LWTf+0XNAV6Mv8nr
++fNfB26Jfqnt58G+j0fXBeZ2j05OzI+zA0bx8z2fb7QL8HugaoE/bsnHPdd/PHK3vuOSw/z/lFOfb5hin3Ku5zK7yh/j+TdU0CPvj98F
+NsFTTlnlXM83Vgmdl1Y56z6rmJmWHGwRt85/ylnXr38au957lFXOuh88GP3xqxzQHFQO2A1POfx+6/y7PfJRVznreaEDPH+u9RzXqh9+
+n+VdXuv5QTv5p7znsrs/3yat572fR8fJi8pZ1/v1XNc6D2yrp5zVPvc4y7nbeu+6nquvclY7XdL+z3nmuZ6/wYZ62rOuepb3e8pZ8rDK
+tdyuq165H3E53P/y8re533E9h3XeHVc9h1XO6kdm3ResLb/ameqpcLuvfsLt3FY/jKvcye+13h+eKzztt55rtXNYz83tnNb9VjG735jV
+vn3J69j9aNXvKme1r1/tcal+w+Vk7jfrvJS536xy1rdZ/eLyqxyu57zHzzNOVz+Lq57jqhceP321J7ffDGc5Zo0LmDmpnjL353w+T6vn
+e3H9Gxl/YY13bv81vlc564HSqj8ex1z/XM7N9VxU/czzvcLqhzyOuf65nBJ2vzjrZ43H3b6rv4Z86kEu51r3ces7rnGXIuvLVc9Lz7Ee
+4Ofc9bP6KVpc1A7reft6/5H5BZ/zbD3r2a5xAXd5rl/vtcsZZ39uXE4+69mueu9rPLCe5nJu7s/tbC+bznq26z2z2/X7lMN6Kpz9x3M5
+11nP1m79+dRzV+Wks/9A/dCd+T34v+2uaJ6XVj9c/T6r9rh5/LRzXovrvqE89VxZn61xWKLqZ3mPw2Ne4/5hlv6K67zE8+dQ/WyNLxfP
+eTvxOF76wK3z0qr/GlQ/u3d/ffQlv//qR6md8zLPX7Wd5Yylv3nR1K/2L6u/+1Uv/Fx11WNZA5Xro7nzve7C42VNp23pnTVeWW2XJefr
+Ujrfi+fVzu2/9HxY9VzWdXU974v6eMpZ9cvz6e25vEdu+jlf1HLaS9zPLOufNe/cq93zaqd7VSHrw7bO4+v6mgftaieeT7mewqoXu0wd
+7s9R6dW+9GVY7em5f6xxj94e3W+e/TmOU6+yvcH92K0eUXn48Tw6zv6c9gBjM2mVw2prPXdb/aOs5wj32Z+zPfUz2xvcj916v7Ye6LrP
+9uL+nFnPc30u+5HtGbfer5ttL/L8dtjPfr2/u0+9wRXWG9t7z7/jreYLe45DV0+9weU07g9sRyz9Poayn9c4dOnUG+ttZ1v1yOMCGoT+
+p2VlP4ezHlhv8PPU9f97XKzrod8c9jP3D+dOvcHllMzz+vq3W8+RlZ/CembPV2v8cDme33f3i/BWPbN/UNtp9+Z6jp979edxq3rOp93K
+7TqWPmH7j82Asvr7q/U89rd/afcmtifKOW6yU36KOfvPXPU81gPEdV7m+YDtrNVfUzj7D49vthN4vuX3t3veWP2Z/ZQ1Drw/5ym2A3Y5
+3K/EDzn8lHgp/6tv/+Doh2z2sB/Gft72U8Y5PrndTD3L4fmd7Zh7br3sXvpbrF+43fo6j98rrP9nO6YuvRLX+13z7M9c3hinf9oLuydb
+P7E9ctjZW2/wfMZ+3NJvjeeDNS7Yj9t+qj/rxa0HS4btgFXOet60+s+19Glb7x9u1Z/tbj//0u+v635p7HUBv/rRU046+zOvG8ylV7ic
+wv4v+yHLb8f91c9z4napMzkm2junYReugHvDpkb6+dPH5wSPu7VvnXDh7vM3T/jpHx8//OXzb19wpWV++o9x810vS4i5DIPhomtCwOVq
+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
+P8w+i+ZkM5TV75ldtMtxez7zi7XoX6JQr3zOl4FZjIzuj2c53A7cHy9mHzHr0G1UN8lbYZT86jd2o22f/s6sr/W86dosLPOSDdgY1etP
+1Clfz/0xrfqI/DzcrOu9ud0DzxM365mNTl9sid1f9sT+kg3I7X6t/rdZGnbPN/4lypvZpqw3nGr3mM95jK8PY/XDdR9mTzILN6x6ZhZX
+W/+fWL2w3uH2Sqr/MDvQrnIio5XXeet5WO90rqdVj1c9WWuN+09lNtQ5j7HeSev9WG8z+pn1TWJWLtun1zmPsd7xzLJiFs59staYTcyk
+6c7ofWalLb1jVz0Gu/W/eWkvw7h4WGadWTFnP5vLnrsDs2U2e+Yoxyz2Jc8j9Tr7WVv9mcczz7PlOu36zQpc7cnzG6PamSXLaH4eX8yq
+4HKYNdgYpW5PvcDsMbvqO7GdNE973LO+s2c/ZFbzXGyLmNe4v5h9rliI67k3+9hu1uayF7ZdGF6Og5ZPFmJd/YdZD3t8CEvIH6zsdT3r
+Ge6/kfUms4rSZs0v/2HZq8yO537vTjY52+ls53P5Ne7pm1kkx7zLeob7L7MBmTXDbPPCbKq67efwcr6w63m5XQKzW9Uf9leYPRVWf43K
+LmT9wH7lV+UUzZ46+w/rd9YP3Z7sqF2OYk81Zsn0055j/ZD6K+WEkz0VmTUYT3uO9QP3e/6zy7EneyoGZp+e8y7Pw8zm4/KZ5cJsrNtv
++/op5z7L2SzfNd7ZXtzldGa7rv686ru5c/7m/s/+61flFLbrtx2/WFIc3uEcXy/YfGc5Ygc//aed8/fkcdpONh/bebscf7J/vmKTIDbi
+Dj2+zibJb59wPeimb5zwFpskH1yQZphasdkk4e0TCFPzyglEyKAQwS8oCd+FmIA3WqyQe7FC5mKFOFOvxRq5FmvkWqwR+m5Lfi/5XPJv
+skkoPvdXLIgfx3lUOso+sjq+c+P/v3ogmwRG8l9/+flz/zfoobgHgZCg5zt/tAFjqyW/fmTDP9L6UcLzwxvLPzJ0+vEfX36tqBv+9ulv
+n25hqEDX//nz5397fmmuyoX6Kl3CRbkUFwWxYKVveTkznzxYKGeFS2IVVwTBKSFveciKC0JYz3vL+624IJQ5JGz5VJlHEpafyuZypKK4
+GojVrGbL65k5JFnCsgfhYgTFtUCs1pW3/MoqMwdhgY1wKYziUgTS5lt+n+VnT5GB++YiuK64DoQFNFuO9I6Dy0CRv7NwGbLiKmD9dCm/
+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
+'''
+SLOT_DATA = json.loads(zlib.decompress(base64.b64decode(''.join(_SLOTS.split()))))
+SLOT_NAMES = {'high-contrast': 'High Contrast', 'cinema-yellow': 'Cinema (Yellow)', 'cinema-green': 'Cinema (Green)',
+              'vivid': 'Vivid', 'positive-film': 'Positive Film', 'negative-film': 'Negative Film',
+              'bleach-bypass': 'Bleach Bypass', 'retro': 'Retro', 'soft-monotone': 'Soft Monotone',
+              'hard-monotone': 'Hard Monotone', 'hi-contrast-bw': 'Hi-Contrast B&W',
+              'mono-standard': 'Standard (monochrome)', 'mono-soft': 'Soft (monochrome)',
+              'mono-solid': 'Solid (monochrome)'}
+SLOT_ORDER = list(SLOT_NAMES)        # looks are placed in this order, so a set of looks always builds the same file
+# what each slot replaces, whether it works in movie mode, and the extra sliders it offers
+SLOT_INFO = {
+    'high-contrast': ('the hidden monochrome High Contrast look', True, '-'),
+    'cinema-yellow': ("RICOH's Cinema (Yellow) look", True, 'Saturation, Hue'),
+    'cinema-green': ("RICOH's Cinema (Green) look", True, 'Saturation, Hue'),
+    'vivid': ("RICOH's Vivid look", True, 'Saturation, Hue'),
+    'positive-film': ("RICOH's Positive Film look", True, 'Saturation, Hue'),
+    'negative-film': ("RICOH's Negative Film look", True, 'Saturation, Hue'),
+    'bleach-bypass': ("RICOH's Bleach Bypass look", True, 'Saturation, Hue'),
+    'retro': ("RICOH's Retro look", True, 'Saturation, Hue'),
+    'soft-monotone': ("RICOH's Soft Monotone look", False, '-'),
+    'hard-monotone': ("RICOH's Hard Monotone look", True, '-'),
+    'hi-contrast-bw': ("RICOH's Hi-Contrast B&W look", True, '-'),
+    'mono-standard': ('the hidden monochrome Standard look', True, '-'),
+    'mono-soft': ('the hidden monochrome Soft look', False, '-'),
+    'mono-solid': ('the hidden monochrome Solid look', True, '-'),
+}
 
-def look_changes(look):
-    """(offset, old, new, what) for one look: matrix, curve table selection, curve(s)."""
+
+def slot_line(name):
+    return f'{SLOT_NAMES[name]} (replaces {SLOT_INFO[name][0]})'
+
+
+def list_slots(log=print):
+    log(f'{"--slot":16s} {"shown as":24s} {"replaces":42s} {"movie":5s}  extra sliders')
+    for name in SLOT_ORDER:
+        what, movie, extra = SLOT_INFO[name]
+        shown = SLOT_NAMES[name] + (' (default)' if name == DEFAULT_SLOT else '')
+        log(f'{name:16s} {shown:24s} {what:42s} {"yes" if movie else "no":5s}  {extra}')
+    log('Your look opens with every slider at 0 in every slot; a slot you do not use keeps its own look.')
+DEFAULT_SLOT = 'high-contrast'
+
+
+def matrix_hex(look):
     mat = look['matrix_q13']
     if any(abs(sum(r) - 8192) > 2 for r in mat) or max(abs(x) for r in mat for x in r) > 0x7fff:
         raise Refused('look matrix must be 3x3, Q13, rows summing to 8192')
-    out = [(LOOK['matrix'][0], LOOK['matrix'][1], struct.pack('<9h', *[x for r in mat for x in r]).hex(),
-            'look colour matrix')]
-    curves = look.get('curves')
-    if not curves:                                   # no look curve: the colour look's plain tone curve
-        for off, old in LOOK['select']:
-            out.append((off, old, struct.pack('<I', LOOK['select_none']).hex(), 'use the plain tone curve'))
-        return out
+    return struct.pack('<9h', *[x for r in mat for x in r]).hex()
+
+
+def distinct_curves(curves):
     if len(curves) != 3 or any(len(c) != 256 or min(c) < 0 or max(c) > 16383 for c in curves):
         raise Refused('curves must be three lists of 256 values in 0..16383')
     distinct = []
     for c in curves:
         if list(c) not in distinct:
             distinct.append(list(c))
+    if len(distinct) > 3:
+        raise Refused('at most three different channel curves are supported')
+    return distinct
+
+
+def look_changes(look):
+    """(offset, old, new, what) for one look: matrix, curve table selection, curve(s)."""
+    out = [(LOOK['matrix'][0], LOOK['matrix'][1], matrix_hex(look), 'look colour matrix')]
+    curves = look.get('curves')
+    if not curves:                                   # no look curve: the colour look's plain tone curve
+        for off, old in LOOK['select']:
+            out.append((off, old, struct.pack('<I', LOOK['select_none']).hex(), 'use the plain tone curve'))
+        return out
+    distinct = distinct_curves(curves)
     if len(distinct) == 1:
         buf, bufs = LOOK['single'], [LOOK['single']]
     elif len(distinct) == 2:
         buf, bufs = LOOK['pair'], [LOOK['pair'], LOOK['single']]
-    elif len(distinct) == 3:
-        buf, bufs = LOOK['pair'], [LOOK['pair'], LOOK['single'], LOOK['third']]
     else:
-        raise Refused('at most three different channel curves are supported')
+        buf, bufs = LOOK['pair'], [LOOK['pair'], LOOK['single'], LOOK['third']]
     for off, old in LOOK['select']:
         out.append((off, old, struct.pack('<I', buf['set']).hex(), 'use the look\'s tone curves'))
     for k, (b, c) in enumerate(zip(bufs, distinct)):
@@ -300,23 +601,26 @@ def look_changes(look):
     return out
 
 
+def hue_table_hex(q, old):
+    """The look's hue-sector matrices in the size of the place that takes them."""
+    import numpy as np
+    q = np.array(q, int)
+    if q.shape != (12, 3, 3) or np.abs(q).max() > 2047 or (q.sum(2) != 1024).any():
+        raise Refused('hue sectors must be 12 matrices of 3x3 (Q10, |value| <= 2047, rows summing to 1024)')
+    copies = len(old) // 2 // (12 * 9 * 4)
+    table = np.repeat(q[:, None], copies, axis=1).astype('<i4').tobytes()
+    if len(table) * 2 != len(old):
+        raise Refused('internal: hue-sector data size')
+    return table.hex()
+
+
 def hue_changes(look):
     """(offset, old, new, what) for the look's 12 hue-sector matrices."""
     q = (look.get('hue_sectors') or {}).get('matrices_q10')
     if not q:
         return []
-    import numpy as np
-    q = np.array(q, int)
-    if q.shape != (12, 3, 3) or np.abs(q).max() > 2047 or (q.sum(2) != 1024).any():
-        raise Refused('hue sectors must be 12 matrices of 3x3 (Q10, |value| <= 2047, rows summing to 1024)')
-    out = [(o, a, b, 'hue sectors') for o, a, b in HUE['fixed']]
     off, old = HUE['matrices']
-    copies = len(old) // 2 // (12 * 9 * 4)
-    table = np.repeat(q[:, None], copies, axis=1).astype('<i4').tobytes()
-    if len(table) * 2 != len(old):
-        raise Refused('internal: hue-sector data size')
-    out.append((off, old, table.hex(), 'hue sectors'))
-    return out
+    return [(o, a, b, 'hue sectors') for o, a, b in HUE['fixed']] + [(off, old, hue_table_hex(q, old), 'hue sectors')]
 
 
 def post_matrix_rows(target):
@@ -338,38 +642,197 @@ def post_matrix_rows(target):
     return np.array(rows)
 
 
-def post_changes(look):
-    """(offset, old, new, what) for the look's colour matrix after the curves."""
-    p = look.get('post_matrix_q9')
-    if not p:
-        return []
+def post_check(p):
     import numpy as np
     p = np.array(p, int)
     if p.shape != (3, 3) or (p.sum(1) != 512).any():
         raise Refused('colour matrix after the curves must be 3x3 with rows summing to 512')
-    targets = post_targets(p)
-    if targets.min() < -256 or targets.max() > 255:
+    t = post_targets(p)
+    if t.min() < -256 or t.max() > 255:
         raise Refused('colour matrix after the curves is out of the camera\'s range')
-    data = b''.join(struct.pack('<9i', *post_matrix_rows(t).ravel().tolist()) for t in targets)
-    off, old = POST['matrices']
+    return p
+
+
+def post_data(p):
+    """The look's nine camera matrices for colour after the curves (one per Hue step)."""
+    return b''.join(struct.pack('<9i', *post_matrix_rows(t).ravel().tolist()) for t in post_targets(p))
+
+
+def post_changes(look, data=None):
+    """(offset, old, new, what) for the look's colour matrix after the curves (data: the slot's places)."""
+    data = data or POST
+    p = look.get('post_matrix_q9')
+    if not p:
+        return []
+    p = post_check(p)
+    places, data = data, post_data(p)
+    off, old = places['matrices']
     if len(data) * 2 != len(old):
         raise Refused('internal: colour matrix data size')
-    return [(o, a, b, 'colour matrix after the curves') for o, a, b in POST['fixed']] + \
+    return [(o, a, b, 'colour matrix after the curves') for o, a, b in places['fixed']] + \
         [(off, old, data.hex(), 'colour matrix after the curves')]
 
 
 DATA_WHAT = 'make the look slot available with its colour processing and defaults'
 
 
-def all_changes(look):
-    post = post_changes(look)
-    taken = {o for o, _, _, _ in post}
-    fixed = [(o, a, b, DATA_WHAT)
-             for o, a, b in DATA['fixed'] if o not in taken]
-    return fixed + look_changes(look) + hue_changes(look) + post
+def slot_changes(look, name):
+    """(offset, old, new, what) for a look on Cinema (Yellow) or Cinema (Green): the look, neutral slider defaults
+    and its colour after the curves."""
+    s, label = SLOT_DATA['slots'][name], SLOT_NAMES[name]
+    out = [(o, a, b, f'{label}: neutral slider defaults') for o, a, b in s['defaults']]
+    out.append((s['matrix'][0], s['matrix'][1], matrix_hex(look), f'{label}: look colour matrix'))
+    so, sold = s['curve_switch']
+    curves = look.get('curves')
+    if not curves:
+        out.append((so, sold, '0000', f'{label}: use the plain tone curve'))
+    else:
+        distinct = distinct_curves(curves)
+        out.append((so, sold, '0100', f'{label}: use the look\'s tone curves (Color Tone has no effect)'))
+        for k, c in enumerate(distinct):
+            out.append((s['curves'][k][0], s['curves'][k][1], struct.pack('<256H', *c).hex(), f'{label}: tone curve {k + 1}'))
+        po, pold = s['curve_pointers']
+        ptrs = [s['curve_va'][distinct.index(list(c))] for c in curves]
+        out.append((po, pold, struct.pack('<III', *ptrs).hex(), f'{label}: tone curve per colour channel'))
+    q = (look.get('hue_sectors') or {}).get('matrices_q10')
+    if q:
+        off, old = s['hue']['table']
+        out.append((off, old, hue_table_hex(q, old), f'{label}: hue sectors'))
+    else:
+        out += [(o, a, b, f'{label}: no hue sectors') for o, a, b in s['hue']['off']]
+    return out + post_changes(look, s['post'])
 
 
-def make_firmware(source, look, log=print):
+class Space:
+    """Room for the looks' data, filled in order; changes() gives the edits."""
+
+    def __init__(self, segments):
+        self.segs = [dict(off=o, old=bytes.fromhex(h), at=va, data=bytearray.fromhex(h), used=0)
+                     for o, h, va in segments]
+
+    def free(self):
+        return sum(len(g['old']) - g['used'] for g in self.segs)
+
+    def put(self, data, what='data'):
+        n = (len(data) + 3) // 4 * 4
+        for g in self.segs:
+            if g['used'] + n <= len(g['old']):
+                at = g['at'] + g['used']
+                g['data'][g['used']:g['used'] + len(data)] = data
+                g['used'] += n
+                return at
+        raise Refused(f'not enough room for these looks together ({what}: {len(data)} bytes, '
+                      f'{self.free()} left); use fewer slots, or looks without hue sectors or colour after the curves')
+
+    def put_at(self, at, data):
+        g = next(g for g in self.segs if g['at'] <= at < g['at'] + g['used'])
+        g['data'][at - g['at']:at - g['at'] + len(data)] = data
+
+    def changes(self):
+        return [(g['off'], g['old'][:g['used']].hex(), bytes(g['data'][:g['used']]).hex(), 'data for the looks')
+                for g in self.segs if g['used']]
+
+
+def extra_space(look, name):
+    """Bytes of room a look in this slot needs."""
+    z = SLOT_DATA['templates']['sizes']
+    n = 0
+    if look.get('curves'):
+        n += z['curve'] * len(distinct_curves(look['curves'])) + z['curves_head']
+    if (look.get('hue_sectors') or {}).get('matrices_q10') and 'hue_table' not in SLOT_DATA['extra'][name]:
+        n += z['hue'] + z['hue_links'] + z['hue_head']
+    if look.get('post_matrix_q9'):
+        n += z['after']
+    return n
+
+
+def extra_changes(look, name, space):
+    """(offset, old, new, what) for a look on one of the further slots."""
+    s, label, tpl = SLOT_DATA['extra'][name], SLOT_NAMES[name], SLOT_DATA['templates']
+    out = [(o, a, b, f'{label}: neutral slider defaults') for o, a, b in s['defaults']]
+    out += [(o, a, b, f'{label}: a colour look with your colours only') for o, a, b in s['fixed']]
+    out.append((s['matrix'][0], s['matrix'][1], matrix_hex(look), f'{label}: look colour matrix'))
+
+    def rows(t, at, what):
+        for o, a, base in s['rows'][t]:
+            new = base if at is None else struct.pack('<I', at).hex()
+            if new != a:
+                out.append((o, a, new, f'{label}: {what}'))
+    curves = look.get('curves')
+    if curves:
+        distinct = distinct_curves(curves)
+        at = [space.put(struct.pack('<256H', *c), 'tone curve') for c in distinct]
+        ptrs = [at[distinct.index(list(c))] for c in curves]
+        rows('curves', space.put(bytes.fromhex(tpl['curves_head']) + struct.pack('<III', *ptrs), 'tone curves'),
+             'use the look\'s tone curves')
+    else:
+        rows('curves', None, 'use the plain tone curve')
+    q = (look.get('hue_sectors') or {}).get('matrices_q10')
+    if q and 'hue_table' in s:                       # this slot has its own room for hue sectors
+        off, old = s['hue_table']
+        out.append((off, old, hue_table_hex(q, old), f'{label}: hue sectors'))
+    elif q:
+        z = tpl['sizes']
+        table = space.put(bytes.fromhex(hue_table_hex(q, '00' * z['hue'])), 'hue sectors')
+        links = space.put(struct.pack(f'<{z["hue_links"] // 4}I', *[table] * (z['hue_links'] // 4)), 'hue sectors')
+        rows('hue', space.put(bytes.fromhex(tpl['hue_head']) + struct.pack('<I', links)
+                              + bytes.fromhex(tpl['hue_tail']), 'hue sectors'), 'hue sectors')
+    else:
+        rows('hue', None, 'no hue sectors')
+    p = look.get('post_matrix_q9')
+    if p:
+        data = post_data(post_check(p))
+        at = space.put(bytes(tpl['after_head'] + len(data)), 'colour after the curves')
+        links = tpl['after_links']
+        space.put_at(at, struct.pack(f'<{len(links)}I', *[at + d for d in links]) + data)
+        rows('colour', at, 'colour after the curves')
+    else:
+        rows('colour', None, 'colour setting')
+    return out
+
+
+def look_slot(look):
+    name = look.get('slot') or DEFAULT_SLOT
+    if name not in SLOT_NAMES:
+        raise Refused(f'unknown slot {name!r}; choose one of: {", ".join(SLOT_NAMES)}')
+    return name
+
+
+def all_changes(looks):
+    """Every change for one look, or several looks in different slots."""
+    looks = [looks] if isinstance(looks, dict) else list(looks)
+    names = [look_slot(lk) for lk in looks]
+    if len(set(names)) != len(names):
+        raise Refused('two looks for the same slot: ' + ', '.join(sorted({n for n in names if names.count(n) > 1})))
+    out, taken = [], set()
+    pool = SLOT_DATA['pool']
+    space = Space(pool['always'] + ([] if DEFAULT_SLOT in names else pool['without-high-contrast']))
+    by_name = dict(zip(names, looks))
+    need = sum(extra_space(lk, n) for n, lk in by_name.items() if n in SLOT_DATA['extra'])
+    if need > space.free():
+        raise Refused(f'these looks need {need} bytes of room together, {space.free()} are available'
+                      + ('' if DEFAULT_SLOT not in names else ' (a look on High Contrast uses part of it)')
+                      + '; use fewer slots, or looks without hue sectors or colour after the curves')
+    for name in SLOT_ORDER:
+        lk = by_name.get(name)
+        if lk is None:
+            continue
+        if name == DEFAULT_SLOT:
+            post = post_changes(lk)
+            taken |= {o for o, _, _, _ in post}
+            out += look_changes(lk) + hue_changes(lk) + post
+        elif name in SLOT_DATA['slots']:
+            out += slot_changes(lk, name)
+        else:
+            out += extra_changes(lk, name, space)
+    out += space.changes()
+    unlock = set(SLOT_DATA['unlock'])                # without a High Contrast look, that slot stays as it was
+    fixed = [(o, a, b, DATA_WHAT) for o, a, b in DATA['fixed']
+             if (o in unlock or DEFAULT_SLOT in names) and o not in taken]
+    return fixed + out
+
+
+def make_firmware(source, looks, log=print):
     digest = sha256(source)
     if digest != OFFICIAL_SHA256 or len(source) != OFFICIAL_BYTES:
         if digest in OTHER_KNOWN:
@@ -385,7 +848,7 @@ def make_firmware(source, look, log=print):
     if rtos is None:
         raise Refused('payload: RTOS section not found')
     buf = bytearray(payload)
-    items = all_changes(look)
+    items = all_changes(looks)
     spans = sorted((o, o + len(bytes.fromhex(a))) for o, a, _, _ in items)
     if any(b0 < a1 for (_, a1), (b0, _) in zip(spans, spans[1:])):
         raise Refused('internal: overlapping changes')
@@ -452,18 +915,38 @@ def identify(data, log=print):
     if digest in names:
         log(f'file     {names[digest]}')
         return 0
-    post = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in POST['fixed'])
+    def has(changes):
+        return all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in changes)
+
+    def yn(x):
+        return 'yes' if x else 'no'
+    unlock = set(SLOT_DATA['unlock'])
+    if not has([c for c in DATA['fixed'] if c[0] in unlock]):
+        log('file     unknown - not the official 1.11 file and not made by GR4-LUTSmith')
+        return 1
+    found = []
+    post = has(POST['fixed'])
     post_rows = {o for o, _, _ in POST['fixed']} if post else set()
-    fixed_ok = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in DATA['fixed']
-                   if o not in post_rows)
-    if fixed_ok:
+    if has([c for c in DATA['fixed'] if c[0] not in unlock and c[0] not in post_rows]):
         m = struct.unpack_from('<9h', payload, LOOK['matrix'][0])
-        hue = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in HUE['fixed'])
-        log(f'file     a GR4-LUTSmith firmware (look matrix {[list(m[i:i + 3]) for i in (0, 3, 6)]}; '
-            f'hue sectors: {"yes" if hue else "no"}; colour after the curves: {"yes" if post else "no"})')
-        return 0
-    log('file     unknown - not the official 1.11 file and not made by GR4-LUTSmith')
-    return 1
+        found.append(f'{SLOT_NAMES[DEFAULT_SLOT]} (look matrix {[list(m[i:i + 3]) for i in (0, 3, 6)]}; '
+                     f'hue sectors: {yn(has(HUE["fixed"]))}; colour after the curves: {yn(post)})')
+    for name, sd in SLOT_DATA['slots'].items():
+        if has(sd['defaults']):
+            off, old = sd['hue']['table']
+            hue = payload[off:off + len(old) // 2].hex() != old and not has(sd['hue']['off'])
+            found.append(f'{SLOT_NAMES[name]} (hue sectors: {yn(hue)}; colour after the curves: '
+                         f'{yn(has(sd["post"]["fixed"]))})')
+    for name, sd in SLOT_DATA['extra'].items():
+        if has(sd['defaults']):
+            def moved(t):
+                return any(payload[o:o + 4].hex() != base for o, _, base in sd['rows'][t])
+            ht = sd.get('hue_table')
+            hue = moved('hue') or (ht is not None and payload[ht[0]:ht[0] + len(ht[1]) // 2].hex() != ht[1])
+            found.append(f'{SLOT_NAMES[name]} (hue sectors: {yn(hue)}; colour after the curves: {yn(moved("colour"))})')
+    log('file     a GR4-LUTSmith firmware; ' + ('personal looks in: ' + '; '.join(found) if found else
+                                                 'no personal look (hidden looks unlocked only)'))
+    return 0
 
 
 # ------------------------------------------------------------------ LUT files
@@ -1455,7 +1938,8 @@ def describe(look, log=print):
         log(f'  everyday colours: ColorChecker ΔE00 {cc["de00_mean"]} (skin {cc["skin"]}, worst {cc["worst"]}); '
             f'greys {gr["de00_mean"]} (largest cast {gr["cast_max"]})')
     hs = look.get('hue_sectors')
-    log(f'  curves: {look["curve_mode"]}; hue sectors: {"yes" if hs else "no"}; '
+    log(f'  for: {SLOT_NAMES.get(look.get("slot") or DEFAULT_SLOT, "?")}; curves: {look["curve_mode"]}; '
+        f'hue sectors: {"yes" if hs else "no"}; '
         f'colour after the curves: {"yes" if look.get("post_matrix_q9") else "no"}; decision: {look["decision"]["reason"]}')
 
 
@@ -1522,6 +2006,7 @@ def run_turns(a, n, state, post, log=print):
             for x in ('recommended', 'compared'):
                 rec.pop(x, None)
             rec['turn'] = k
+            rec['slot'] = a.slot
             state['kept'], joined, left = keep(state['kept'], rec)
             state['history'].append(dict(result=result_name(rec), seed=seed, kept_when_found=joined,
                                          fit_score=rec['scores']['fit_score'], **measures(rec)))
@@ -1611,6 +2096,8 @@ def main(argv=None):
         p.add_argument('--photo', type=Path, help='a DNG from your GR IV: judges the fit on real content (needs rawpy)')
         p.add_argument('--curve', choices=('auto', 'single', 'pair', 'rgb'), default='auto', help=argparse.SUPPRESS)
         p.add_argument('--no-hue', action='store_true', help='do not use hue sectors (colour changes per hue)')
+        p.add_argument('--slot', choices=tuple(SLOT_NAMES), default=DEFAULT_SLOT,
+                       help='which Image Control look to replace with yours (default high-contrast)')
         p.add_argument('--turns', type=int, default=1,
                        help='how many fits to run; each extra turn starts from a new random point (default 1)')
         p.add_argument('--seed', type=int, help='run turns from this seed (repeats a turn shown earlier)')
@@ -1625,14 +2112,16 @@ def main(argv=None):
     f = sub.add_parser('fit', help='fit a LUT only (writes look.json)')
     lut_args(f)
     f.add_argument('-o', '--output-dir', type=Path)
-    b = sub.add_parser('build', help='look.json + official firmware -> firmware with the look')
-    b.add_argument('look', type=Path)
-    b.add_argument('input', type=Path)
+    b = sub.add_parser('build', help='look.json file(s) + official firmware -> firmware with the look(s)')
+    b.add_argument('looks', type=Path, nargs='+', metavar='look.json',
+                   help='one look per slot (each look.json says its slot)')
+    b.add_argument('input', type=Path, help='official RICOH fwdc248b.bin (GR IV 1.11)')
     b.add_argument('-o', '--output-dir', type=Path)
     p = sub.add_parser('preview', help='render a DNG with the look (needs rawpy, pillow)')
     p.add_argument('look', type=Path)
     p.add_argument('photo', type=Path)
     p.add_argument('-o', '--output', type=Path)
+    sub.add_parser('slots', help='list the Image Control looks yours can replace (--slot)')
     c = sub.add_parser('check', help='identify a fwdc248b.bin and validate its container')
     c.add_argument('input', type=Path)
     s = sub.add_parser('selftest', help='build the bundled example and compare with the verified result')
@@ -1645,6 +2134,9 @@ def main(argv=None):
     try:
         if a.cmd == 'check':
             return identify(a.input.read_bytes())
+        if a.cmd == 'slots':
+            list_slots()
+            return 0
         print(f'GR4-LUTSmith {VERSION}')
         if a.cmd == 'selftest':
             look = load_look(Path(__file__).resolve().parent / SELFTEST_LOOK)
@@ -1670,6 +2162,7 @@ def main(argv=None):
                     raise Refused(f'{out_dir} already has results; choose another output directory')
             if a.turns < 1:
                 raise Refused('--turns must be at least 1')
+            print(f'slot: {slot_line(a.slot)}')
             state = dict(kept=[], history=[], history_turns=[])
             n, post = a.turns, a.after_curves
             while n:
@@ -1708,16 +2201,22 @@ def main(argv=None):
                 data = made[id(r)]
                 target = write_atomic(data, d)
                 print(f'wrote {target}  (SHA-256 {sha256(data)})')
-            print('Copy one of these files to the root of the SD card and run the camera\'s firmware update.'
-                  if len(build) > 1 else
-                  'Copy this file to the root of the SD card and run the camera\'s firmware update.')
+            print(('Copy one of these files' if len(build) > 1 else 'Copy this file')
+                  + ' to the root of the SD card and run the camera\'s firmware update.\n'
+                  + f'Then choose {SLOT_NAMES[a.slot]} in Image Control: your look is there.')
             return 0
         if a.cmd == 'build':
-            look = load_look(a.look)
-            out_dir = a.output_dir or a.look.parent
-            data = make_firmware(a.input.read_bytes(), look)
+            looks = [load_look(x) for x in a.looks]
+            for x, lk in zip(a.looks, looks):
+                print(f'{x}: {slot_line(look_slot(lk))}')
+            out_dir = a.output_dir or a.looks[0].parent
+            data = make_firmware(a.input.read_bytes(), looks)
             target = write_atomic(data, out_dir)
             print(f'wrote {target}  (SHA-256 {sha256(data)})')
+            names = [SLOT_NAMES[n] for n in SLOT_ORDER if n in {look_slot(lk) for lk in looks}]
+            print('Copy this file to the root of the SD card and run the camera\'s firmware update.\n'
+                  + ('Then choose ' + names[0] + ' in Image Control: your look is there.' if len(names) == 1 else
+                     'Your looks are on: ' + ', '.join(names) + '.'))
             return 0
     except Refused as exc:
         print(f'refused: {exc}', file=sys.stderr)
