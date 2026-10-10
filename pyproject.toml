@@ -1,6 +1,6 @@
 [project]
 name = "gr4-lutsmith"
-version = "1.6.0"
+version = "2.0.0"
 description = "Put the look of a .cube LUT into a RICOH GR IV (firmware 1.11)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -13,6 +13,17 @@ dependencies = [
 photo = [
     "rawpy>=0.18",
     "pillow>=9",
+]
+
+# The desktop app (GR4-LUTSmith window): Qt for the window, plus the photo tools
+app = [
+    "pyside6-essentials>=6.8,<6.9",      # Qt 6.8 LTS: macOS 12+, Windows 10+
+    "rawpy>=0.18",
+    "pillow>=9",
+]
+# Building the downloadable app (one folder per platform)
+build = [
+    "pyinstaller>=6.6",
 ]
 
 [tool.uv]

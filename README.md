@@ -16,6 +16,15 @@ look, on your own computer.
 > Installing modified firmware may void your warranty. Please read
 > [Before you start](#before-you-start) and [Risks](#risks) first.
 
+## Two ways to use it
+
+- **The app** (macOS and Windows): download, unzip, open. Every step is on screen, in the camera's 21 languages.
+  See [The app](#the-app).
+- **The command line** (macOS, Windows, Linux): the same tool for the terminal, with [uv](https://docs.astral.sh/uv/).
+  See [Install](#install).
+
+Both make exactly the same firmware from the same LUT and choices.
+
 ## How it works
 
 The GR IV does not run LUTs directly. Its looks are built from a few native
@@ -76,6 +85,93 @@ After installing, the Image Control list ends like this:
 - The five monochrome looks of the GR IV Monochrome are available too, as in
   GR4-MonoUnlock.
 - All your existing looks are unchanged.
+
+## The app
+
+### Download
+
+From the [latest release](../../releases/latest), download the file for your computer:
+
+| Computer | File |
+| --- | --- |
+| Mac with Apple silicon (M1 or later) | `GR4-LUTSmith-<version>-macOS-AppleSilicon.zip` |
+| Mac with an Intel processor | `GR4-LUTSmith-<version>-macOS-Intel.zip` |
+| Windows 10 or 11 (64-bit) | `GR4-LUTSmith-<version>-Windows-x64.zip` |
+
+macOS 12 (Monterey) or later is needed. Not sure which Mac you have? Apple menu → **About This Mac**: "Chip
+Apple M…" is Apple silicon, "Processor Intel" is Intel.
+
+Each zip holds the app and a `Licences` folder (the licences of the parts it is built from).
+
+### Check it came from this project (optional)
+
+Every zip is built by this repository's own build on GitHub, which signs a record of where it came from: the
+repository, the build and the exact version of the code. You can check that your download is that file and was
+not changed or replaced, with the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`):
+
+```sh
+gh attestation verify GR4-LUTSmith-2.0.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+```
+
+(use the name of the zip you downloaded; on Windows, run it in PowerShell from your Downloads folder). It ends with
+"Verification succeeded!" and names the build that made the file. Any other result means: do not open it, and
+download it again from the release page. The repository's **Attestations** page lists every signed file.
+
+A quicker check that the download is complete: the release lists every file's SHA-256 in `SHA256SUMS`.
+
+- macOS (Terminal): `shasum -a 256 ~/Downloads/GR4-LUTSmith-*.zip`
+- Windows (PowerShell): `Get-FileHash $HOME\Downloads\GR4-LUTSmith-*.zip -Algorithm SHA256`
+
+This only shows the file arrived intact, not who made it: `SHA256SUMS` sits on the same page as the zips.
+
+You can also skip the download entirely: run the app from the source code (see [Files](#files)), or make the
+firmware with the [command line](#install). The app and the command line build exactly the same `fwdc248b.bin`,
+and `uv run gr4_lutsmith.py check fwdc248b.bin` shows what any firmware file contains.
+
+### Open it the first time
+
+The app is free and not signed with a paid Apple or Microsoft certificate, so your computer asks once whether
+you trust it.
+
+**macOS**
+
+1. Unzip the file and move **GR4-LUTSmith** to your Applications folder.
+2. Open it. macOS says it cannot check the app for malicious software; choose **Done** (macOS 15) or **Cancel**.
+3. Open **System Settings → Privacy & Security**, scroll down to the message about GR4-LUTSmith and choose
+   **Open Anyway**, then confirm with your password.
+   On macOS 12 to 14 you can instead Control-click the app, choose **Open**, then **Open** again.
+
+From then on it opens normally.
+
+**Windows**
+
+1. Right-click the zip → **Extract All…**, and open the extracted **GR4-LUTSmith** folder (do not run it from
+   inside the zip).
+2. Open **GR4-LUTSmith.exe**. If Windows shows "Windows protected your PC", choose **More info → Run anyway**.
+
+Keep the whole folder together: the app needs the `_internal` folder next to it.
+
+### Use it
+
+The app walks you through the same steps as this guide: your camera's firmware file, the LUT (and optionally a
+DNG), the slot with its name and icon, the fit, and the build. It saves `fwdc248b.bin` where you choose; then
+follow [Copy it to the SD card](#4-copy-it-to-the-sd-card) and [Update the camera](#5-update-the-camera).
+
+- **Language:** the app follows your computer's language; change it at the top of the window. It is also the
+  camera language your slot names are checked against (see [Naming the slot](#naming-the-slot)).
+- **Appearance:** System, Day or Night, at the top of the window.
+- **Check a firmware file** (left side) tells you whether a `fwdc248b.bin` is RICOH's official file, made by
+  GR4-LUTSmith (and with which looks), or something else.
+- Looks someone shared (`.json`) work in the app too: choose "A shared look" on the first page.
+
+### If something goes wrong
+
+- **macOS says the app is damaged**: download it again (the file was cut short), and check it as in
+  [Check it came from this project](#check-it-came-from-this-project-optional).
+- **The app does not start on Windows**: make sure you extracted the whole zip and run `GR4-LUTSmith.exe` from
+  the extracted folder.
+- **The firmware file is refused**: the app only accepts RICOH's unmodified GR IV 1.11 `fwdc248b.bin`. A file
+  GR4-LUTSmith already changed cannot be changed again; start from the unmodified file.
 
 ## Before you start
 
@@ -526,6 +622,7 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | Your own name for the slot (`--name`) | tested on a GR IV 1.11: works |
 | Your own icon for the slot (`--icon`) | tested on a GR IV 1.11: works |
 | Building from a shared `look.json` | checked offline: the firmware is byte-identical to `make` with the same LUT result, slot, name and icon; nothing new reaches the camera |
+| The app (`GR4-LUTSmith`) builds the same firmware as the command line | checked offline: byte-identical for the same LUT, photo and choices |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files
@@ -533,13 +630,21 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 ```
 GR4-LUTSmith/
 ├── README.md            this guide
-├── gr4_lutsmith.py      the tool
+├── gr4_lutsmith.py      the tool (the command line, and the engine the app uses)
+├── lutsmith_app/        the app: window, translations (assets/i18n), icons and fonts
+├── packaging/           building the app (packaging/build.py), its icons and licence texts
+├── tests/test_app.py    checks run before every app build
+├── tools/               translation check, app icon
 ├── pyproject.toml       dependencies (for uv)
 ├── uv.lock
 └── examples/
     ├── film-1d.cube      a 1D film-style LUT (used by selftest)
     └── film-1d.look.json its fitted look
 ```
+
+Run the app from the source: `uv sync --extra app` then `uv run python -m lutsmith_app`.
+Build it: `uv run python packaging/build.py` (on a Mac with Apple silicon, add `--arch x86_64` for the Intel
+build); the zip lands in `dist/`.
 
 | File | SHA-256 |
 | --- | --- |

@@ -14,3 +14,7 @@ CLAUDE.md
 /examples/*
 !/examples/film-1d.cube
 !/examples/film-1d.look.json
+
+# app builds (packaging/build.py)
+/build/
+/dist/

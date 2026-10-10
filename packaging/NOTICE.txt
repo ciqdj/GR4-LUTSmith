@@ -1,0 +1,14 @@
+GR4-LUTSmith includes the following components, each under its own licence (texts in this folder):
+
+- Python 3.12 (Python Software Foundation License)               Python/
+- Qt 6 and PySide6 / Shiboken6 (LGPL-3.0)                         LGPL-3.0.txt, GPL-3.0.txt
+  The Qt libraries are separate files inside the app (on macOS in GR4-LUTSmith.app/Contents/Frameworks,
+  on Windows in GR4-LUTSmith/_internal); you may replace them with your own compatible build.
+  Source: https://download.qt.io/official_releases/QtForPython/ and https://code.qt.io/
+- NumPy (BSD-3-Clause)                                           numpy/
+- Pillow (MIT-CMU)                                               pillow/
+- rawpy (MIT) with LibRaw (LGPL-2.1 or CDDL-1.0)                 rawpy/
+- Barlow and Barlow Semi Condensed fonts (SIL Open Font License 1.1)  Barlow-OFL.txt
+
+The Image Control icons are redrawn after the RICOH GR IV's own menu icons. RICOH and GR are trademarks of
+RICOH IMAGING COMPANY, LTD.; GR4-LUTSmith is not made or endorsed by RICOH.

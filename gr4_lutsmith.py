@@ -31,7 +31,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '1.7.0'
+VERSION = '2.0.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -51,6 +51,18 @@ LITERAL_CHUNK = 0x6000
 
 class Refused(Exception):
     pass
+
+
+class Stopped(Exception):
+    """A fit stopped on request (STOP)."""
+
+
+STOP = None             # a callable that returns True to stop a running fit (used by the app; the CLI leaves it None)
+
+
+def check_stop():
+    if STOP is not None and STOP():
+        raise Stopped('stopped')
 
 
 def sha256(data):
@@ -956,9 +968,9 @@ def system_language():
     return LOCALES.get(low[:2], 'English')
 
 
-def name_scripts(name):
-    """{script label: camera languages that show it} for every non-ASCII character; refuses characters no camera
-    language shows."""
+def scan_name(name):
+    """({script label: camera languages that show it} for every non-ASCII character, characters no camera language
+    shows)."""
     found, bad = {}, []
     for c in name:
         if ' ' <= c <= '~':
@@ -968,37 +980,68 @@ def name_scripts(name):
             bad.append(c)
         else:
             found.setdefault(hit[2], set()).update(hit[1])
+    return found, ''.join(sorted(set(bad)))
+
+
+def name_scripts(name):
+    """{script label: camera languages that show it} for every non-ASCII character; refuses characters no camera
+    language shows."""
+    found, bad = scan_name(name)
     if bad:
-        raise Refused(f'the camera cannot show {"".join(sorted(set(bad)))!r} in any of its languages; use letters '
+        raise Refused(f'the camera cannot show {bad!r} in any of its languages; use letters '
                       'and characters of one of the camera\'s languages')
     return found
+
+
+def name_slot_limit(slot):
+    """The longest name the slot takes, or None when it cannot be renamed."""
+    s = SLOT_DATA['names']['slots'].get(slot)
+    return max(r[5] for r in s['languages']) if s else None
+
+
+def name_report(name, slot, camera_language='English'):
+    """The name check as data (the app words it in the user's language): problem (a refusal: 'fixed', 'space',
+    'characters', 'length') with its detail, the scripts used and the camera languages showing all of them, whether
+    it needs the user's confirmation (question) and whether it may be cut off (long)."""
+    most = name_slot_limit(slot)
+    out = dict(problem=None, detail=None, most=most, scripts=[], languages=[], question=False, long=False)
+    if most is None:
+        return dict(out, problem='fixed')
+    if not name or name != name.strip():
+        return dict(out, problem='space')
+    found, bad = scan_name(name)
+    if bad:
+        return dict(out, problem='characters', detail=bad)
+    if len(name) > most:
+        return dict(out, problem='length', detail=len(name))
+    width = sum(2 if 0x1100 <= ord(c) and not 0xff61 <= ord(c) <= 0xffdc else 1 for c in name)
+    both = set(CAMERA_LANGUAGES)
+    for langs in found.values():
+        both &= langs
+    return dict(out, scripts=list(found), languages=[l for l in CAMERA_LANGUAGES if l in both] if found else [],
+                question=bool(found) and camera_language not in both, long=width > SLOT_DATA['names']['display_hint'])
 
 
 def check_name(name, slot, camera_language='English'):
     """(notes, question) for naming a slot. A question means the name may not show with this camera language and
     needs the user's confirmation; problems are refused."""
-    nd = SLOT_DATA['names']
-    s = nd['slots'].get(slot)
-    if s is None:
+    r = name_report(name, slot, camera_language)
+    if r['problem'] == 'fixed':
         raise Refused(f'{SLOT_NAMES[slot]} cannot be renamed (its name is shared with another look)')
-    if not name or name != name.strip():
+    if r['problem'] == 'space':
         raise Refused('the name must not be empty or start/end with a space')
-    found = name_scripts(name)
-    most = max(r[5] for r in s['languages'])
-    if len(name) > most:
-        raise Refused(f'{SLOT_NAMES[slot]} takes names of up to {most} characters ({name!r} has {len(name)})')
+    if r['problem'] == 'characters':
+        name_scripts(name)
+    if r['problem'] == 'length':
+        raise Refused(f'{SLOT_NAMES[slot]} takes names of up to {r["most"]} characters ({name!r} has {len(name)})')
     notes, question = [], None
-    width = sum(2 if 0x1100 <= ord(c) and not 0xff61 <= ord(c) <= 0xffdc else 1 for c in name)
-    if width > nd['display_hint']:
+    if r['long']:
         notes.append(f'long names may be cut off on some screens')
-    if found:
-        both = set(CAMERA_LANGUAGES)
-        for langs in found.values():
-            both &= langs
-        kinds = ', '.join(found)
-        if camera_language not in both:
-            where = ('no single camera language shows all of them' if not both else
-                     'they show when the camera is set to ' + ', '.join(l for l in CAMERA_LANGUAGES if l in both))
+    if r['scripts']:
+        kinds = ', '.join(r['scripts'])
+        if r['question']:
+            where = ('no single camera language shows all of them' if not r['languages'] else
+                     'they show when the camera is set to ' + ', '.join(r['languages']))
             question = (f'This name uses {kinds}. Your camera language is {camera_language}, so they may not show; '
                         f'{where}.')
         else:
@@ -1108,6 +1151,20 @@ def look_slot(look):
     return name
 
 
+def shared_space(names):
+    """The room the slots without their own storage share (less when High Contrast carries a look)."""
+    pool = SLOT_DATA['pool']
+    return Space(pool['always'] + ([] if DEFAULT_SLOT in names else pool['without-high-contrast']))
+
+
+def room(looks):
+    """{'need': bytes these looks take from the shared room, 'free': bytes available} (looks: look dicts with 'slot')."""
+    looks = [looks] if isinstance(looks, dict) else list(looks)
+    names = [look_slot(lk) for lk in looks]
+    return dict(need=sum(extra_space(lk, n) for n, lk in zip(names, looks) if n in SLOT_DATA['extra']),
+                free=shared_space(names).free())
+
+
 def all_changes(looks):
     """Every change for one look, or several looks in different slots."""
     looks = [looks] if isinstance(looks, dict) else list(looks)
@@ -1115,10 +1172,9 @@ def all_changes(looks):
     if len(set(names)) != len(names):
         raise Refused('two looks for the same slot: ' + ', '.join(sorted({n for n in names if names.count(n) > 1})))
     out, taken = [], set()
-    pool = SLOT_DATA['pool']
-    space = Space(pool['always'] + ([] if DEFAULT_SLOT in names else pool['without-high-contrast']))
+    space = shared_space(names)
     by_name = dict(zip(names, looks))
-    need = sum(extra_space(lk, n) for n, lk in by_name.items() if n in SLOT_DATA['extra'])
+    need = room(looks)['need']
     if need > space.free():
         raise Refused(f'these looks need {need} bytes of room together, {space.free()} are available'
                       + ('' if DEFAULT_SLOT not in names else ' (a look on High Contrast uses part of it)')
@@ -1224,44 +1280,39 @@ def write_atomic(data, out_dir):
     return target
 
 
-def identify(data, log=print):
+def inspect_firmware(data):
+    """What a fwdc248b.bin is, as data: sha256, bytes, valid (container) and error, kind ('official', 'known',
+    'unknown' or 'lutsmith'), name (for official/known), and for a GR4-LUTSmith file its looks: one dict per slot
+    with slot, hue (hue sectors), post (colour after the curves), name (shown name when renamed), icon (own icon) and,
+    for High Contrast, matrix."""
     digest = sha256(data)
     names = {OFFICIAL_SHA256: 'official RICOH GR IV 1.11 (unmodified)', **OTHER_KNOWN}
-    log(f'SHA-256  {digest}')
-    log(f'bytes    {len(data)}')
+    out = dict(sha256=digest, bytes=len(data), valid=False, error=None, kind=None, name=None, looks=[])
     try:
         payload = check_container(data)
-        log('container: valid (size fields, footer, both checksums)')
     except Refused as exc:
-        log(f'container: INVALID - {exc}')
-        return 2
+        return dict(out, error=str(exc))
+    out['valid'] = True
     if digest in names:
-        log(f'file     {names[digest]}')
-        return 0
+        return dict(out, kind='official' if digest == OFFICIAL_SHA256 else 'known', name=names[digest])
+
     def has(changes):
         return all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in changes)
-
-    def yn(x):
-        return 'yes' if x else 'no'
     unlock = set(SLOT_DATA['unlock'])
     if not has([c for c in DATA['fixed'] if c[0] in unlock]):
-        log('file     unknown - not the official 1.11 file and not made by GR4-LUTSmith')
-        return 1
-    found, found_slots = [], []
+        return dict(out, kind='unknown')
+    looks = []
     post = has(POST['fixed'])
     post_rows = {o for o, _, _ in POST['fixed']} if post else set()
     if has([c for c in DATA['fixed'] if c[0] not in unlock and c[0] not in post_rows]):
         m = struct.unpack_from('<9h', payload, LOOK['matrix'][0])
-        found_slots.append(DEFAULT_SLOT)
-        found.append(f'{SLOT_NAMES[DEFAULT_SLOT]} (look matrix {[list(m[i:i + 3]) for i in (0, 3, 6)]}; '
-                     f'hue sectors: {yn(has(HUE["fixed"]))}; colour after the curves: {yn(post)})')
+        looks.append(dict(slot=DEFAULT_SLOT, matrix=[list(m[i:i + 3]) for i in (0, 3, 6)], hue=has(HUE['fixed']),
+                          post=post))
     for name, sd in SLOT_DATA['slots'].items():
         if has(sd['defaults']):
             off, old = sd['hue']['table']
             hue = payload[off:off + len(old) // 2].hex() != old and not has(sd['hue']['off'])
-            found_slots.append(name)
-            found.append(f'{SLOT_NAMES[name]} (hue sectors: {yn(hue)}; colour after the curves: '
-                         f'{yn(has(sd["post"]["fixed"]))})')
+            looks.append(dict(slot=name, hue=hue, post=has(sd['post']['fixed'])))
     for name, sd in SLOT_DATA['extra'].items():
         sign = sd['defaults'] + sd['fixed']          # the slot's own look-independent changes
         if sign and has(sign):
@@ -1269,8 +1320,8 @@ def identify(data, log=print):
                 return any(payload[o:o + 4].hex() != base for o, _, base in sd['rows'][t])
             ht = sd.get('hue_table')
             hue = moved('hue') or (ht is not None and payload[ht[0]:ht[0] + len(ht[1]) // 2].hex() != ht[1])
-            found_slots.append(name)
-            found.append(f'{SLOT_NAMES[name]} (hue sectors: {yn(hue)}; colour after the curves: {yn(moved("colour"))})')
+            looks.append(dict(slot=name, hue=hue, post=moved('colour')))
+
     def shown_name(slot):
         """The slot's English name as stored, when it was renamed."""
         ns = SLOT_DATA['names']['slots'].get(slot)
@@ -1285,7 +1336,6 @@ def identify(data, log=print):
             return '?'
         off = rows[at][3]
         return payload[off:off + 2 * (length - SLOT_DATA['names']['length_base'])].decode('utf-16-le', 'replace')
-    renamed = {n: shown_name(n) for n in SLOT_NAMES}
 
     def own_icon(slot):
         place = SLOT_DATA['icons']['slots'].get(slot)
@@ -1293,8 +1343,33 @@ def identify(data, log=print):
             return False
         off, w, h, digest = place
         return hashlib.sha256(payload[off:off + w * h * 4]).hexdigest() != digest
-    found = [f + (f' named "{renamed[n]}"' if renamed[n] else '') + (' with its own icon' if own_icon(n) else '')
-             for n, f in zip(found_slots, found)]
+    for lk in looks:
+        lk['name'], lk['icon'] = shown_name(lk['slot']), own_icon(lk['slot'])
+    return dict(out, kind='lutsmith', looks=looks)
+
+
+def identify(data, log=print):
+    r = inspect_firmware(data)
+    log(f'SHA-256  {r["sha256"]}')
+    log(f'bytes    {r["bytes"]}')
+    if not r['valid']:
+        log(f'container: INVALID - {r["error"]}')
+        return 2
+    log('container: valid (size fields, footer, both checksums)')
+    if r['kind'] in ('official', 'known'):
+        log(f'file     {r["name"]}')
+        return 0
+    if r['kind'] == 'unknown':
+        log('file     unknown - not the official 1.11 file and not made by GR4-LUTSmith')
+        return 1
+
+    def yn(x):
+        return 'yes' if x else 'no'
+    found = []
+    for lk in r['looks']:
+        f = (f'{SLOT_NAMES[lk["slot"]]} (' + (f'look matrix {lk["matrix"]}; ' if 'matrix' in lk else '')
+             + f'hue sectors: {yn(lk["hue"])}; colour after the curves: {yn(lk["post"])})')
+        found.append(f + (f' named "{lk["name"]}"' if lk['name'] else '') + (' with its own icon' if lk['icon'] else ''))
     log('file     a GR4-LUTSmith firmware; ' + ('personal looks in: ' + '; '.join(found) if found else
                                                  'no personal look (hidden looks unlocked only)'))
     return 0
@@ -1726,6 +1801,8 @@ class Fitter:
         state = [[np.zeros_like(p), np.zeros_like(p)] for p in params]
         hist = []
         for it in range(iters):
+            if it % 25 == 0:
+                check_stop()
             total, loss, gt, gr, gp_ = self.loss_grad(theta, raw, phi)
             a = lr * 0.5 * (1 + math.cos(math.pi * it / iters))
             for p, gp, st in zip(params, (gt, gr, gp_), state):
@@ -1902,6 +1979,8 @@ class HueFitter:
         D = np.zeros((12, 3))
         m1, m2 = np.zeros_like(D), np.zeros_like(D)
         for it in range(iters):
+            if it % 25 == 0:
+                check_stop()
             total, loss, gD = self.loss_grad(D)
             a = lr * 0.5 * (1 + math.cos(math.pi * it / iters))
             m1 = 0.9 * m1 + 0.1 * gD
@@ -2351,7 +2430,7 @@ def run_turns(a, n, state, post, log=print):
             seed = None if k == 1 else secrets.randbelow(2 ** 31)
         log(f'\nturn {k} ({"classic start" if seed is None else f"random start, seed {seed}"}'
             + (', with colour after the curves)' if post else ')'))
-        res = fit_lut(a.lut, a.space, a.curve, a.photo, a.iters, hue=not a.no_hue, post=post, seed=seed)
+        res = fit_lut(a.lut, a.space, a.curve, a.photo, a.iters, log=log, hue=not a.no_hue, post=post, seed=seed)
         alt = res.pop('after_curves', None)
         state['history_turns'].append(dict(seed=seed, after_curves=post))
         for rec in (res, alt):

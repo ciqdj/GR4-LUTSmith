@@ -1,0 +1,128 @@
+{
+ "Czech": {
+  "Standard": "Standardní",
+  "Image Control": "Ovládání obrazu",
+  "Saturation": "Saturace",
+  "Hue": "Odstín"
+ },
+ "Danish": {
+  "Standard": "Standard",
+  "Image Control": "Billedkontrol",
+  "Saturation": "Mætning",
+  "Hue": "Nuance"
+ },
+ "English": {
+  "Standard": "Standard",
+  "Image Control": "Image Control",
+  "Saturation": "Saturation",
+  "Hue": "Hue"
+ },
+ "Finnish": {
+  "Standard": "Vakio",
+  "Image Control": "Kuvansäätö",
+  "Saturation": "Värikylläisyys",
+  "Hue": "Sävy"
+ },
+ "French": {
+  "Standard": "Standard",
+  "Image Control": "Contrôle de l'image",
+  "Saturation": "Saturation",
+  "Hue": "Teinte"
+ },
+ "German": {
+  "Standard": "Standard",
+  "Image Control": "Bildsteuerung",
+  "Saturation": "Farbsättigung",
+  "Hue": "Farbton"
+ },
+ "Greek": {
+  "Standard": "Στάνταρ",
+  "Image Control": "Έλεγχος Εικόνας",
+  "Saturation": "Χρωματική Ανάλυση",
+  "Hue": "Χροιά"
+ },
+ "Hungarian": {
+  "Standard": "Normál",
+  "Image Control": "Képvezérlés",
+  "Saturation": "Színtelítettség",
+  "Hue": "Színárnyalat"
+ },
+ "Italian": {
+  "Standard": "Standard",
+  "Image Control": "Controllo immagine",
+  "Saturation": "Saturazione",
+  "Hue": "Tinta"
+ },
+ "Japanese": {
+  "Standard": "スタンダード",
+  "Image Control": "イメージコントロール",
+  "Saturation": "彩度",
+  "Hue": "色相"
+ },
+ "Korean": {
+  "Standard": "표준",
+  "Image Control": "화상 컨트롤",
+  "Saturation": "채도",
+  "Hue": "색상"
+ },
+ "Dutch": {
+  "Standard": "Standaard",
+  "Image Control": "Beeldregeling",
+  "Saturation": "Kleurverzadiging",
+  "Hue": "Tint"
+ },
+ "Polish": {
+  "Standard": "Standardowy",
+  "Image Control": "Sterowanie obrazem",
+  "Saturation": "Nasycenie",
+  "Hue": "Odcień"
+ },
+ "Portuguese": {
+  "Standard": "Standard",
+  "Image Control": "Controlo de Imagem",
+  "Saturation": "Saturação",
+  "Hue": "Matiz"
+ },
+ "Russian": {
+  "Standard": "Стандартный",
+  "Image Control": "Управл. изображением",
+  "Saturation": "Насыщенность",
+  "Hue": "Цветовой тон"
+ },
+ "Chinese-S": {
+  "Standard": "标准",
+  "Image Control": "影像控制",
+  "Saturation": "饱和度",
+  "Hue": "色相"
+ },
+ "Spanish": {
+  "Standard": "Estándar",
+  "Image Control": "Control de imagen",
+  "Saturation": "Saturación",
+  "Hue": "Matiz"
+ },
+ "Swedish": {
+  "Standard": "Standard",
+  "Image Control": "Bildkontroll",
+  "Saturation": "Färgmättnad",
+  "Hue": "Färgton"
+ },
+ "Thai": {
+  "Standard": "มาตรฐาน",
+  "Image Control": "ควบคุมภาพ",
+  "Saturation": "ค่าอิ่มตัวของสี",
+  "Hue": "เฉดสี"
+ },
+ "Chinese-T": {
+  "Standard": "標準",
+  "Image Control": "影像控制",
+  "Saturation": "飽和度",
+  "Hue": "色相"
+ },
+ "Turkish": {
+  "Standard": "Standart",
+  "Image Control": "Görüntü Kontrolü",
+  "Saturation": "Doygunluk",
+  "Hue": "Renk"
+ }
+}
