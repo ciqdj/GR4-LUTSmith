@@ -67,6 +67,8 @@ After installing, the Image Control list ends like this:
 - Your look uses the name and icon of **High Contrast** (the fourth entry after
   the first "HDR Tone"). You can choose **Cinema (Yellow)** or **Cinema (Green)**
   instead, or use several of them: see [Choosing the slot](#choosing-the-slot).
+  With `--name` the slot shows your own name instead: see
+  [Naming the slot](#naming-the-slot).
 - It opens with **every slider at 0**, sharpness at its standard value and
   **grain off**. Your LUT's look is built in at those settings; the sliders then
   work as usual, starting from your look.
@@ -114,6 +116,8 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
 - `--slot vivid`, `--slot cinema-yellow`, … (optional) puts your look in place
   of another look instead of High Contrast. `uv run gr4_lutsmith.py slots`
   lists them all: see [Choosing the slot](#choosing-the-slot).
+- `--name "My Look"` (optional) shows the slot under your own name, in every
+  camera language: see [Naming the slot](#naming-the-slot).
 - `--turns 3` (optional) runs three fits and keeps the best ones: see
   [More turns](#more-turns).
 - `--after-curves` is optional: see [Colour after the curves](#colour-after-the-curves).
@@ -338,6 +342,27 @@ in the terminal:
   unused for the most room.
 - `check` lists which slots carry a personal look.
 
+## Naming the slot
+
+`--name` (`make` and `fit`) gives the slot your own name, in the Image Control
+menu and its screens, in all of the camera's languages:
+
+```sh
+uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --slot vivid --name "Portra"
+```
+
+- Each slot takes names up to a certain length: `uv run gr4_lutsmith.py slots`
+  shows it (from 9 characters on Retro to 23 on Cinema (Yellow)). The second
+  monochrome Standard cannot be renamed, because it shares its name with the
+  colour Standard look.
+- Use letters, digits, spaces and simple punctuation (`( ) + - . / : % ?`).
+  Letters with accents and other symbols are refused. A few letters
+  (`Q V Y Z j q w y`, and `I` in Chinese) appear in no menu of some languages
+  yet; the tool tells you which, and they may not show there.
+- Names over 16 characters may be cut off on some screens.
+- Without `--name`, the slot keeps its own name. The name is saved in
+  `look.json`, so `build` uses it too, and `check` shows it.
+
 ## When a LUT is "poor"
 
 Many film-simulation LUTs reshape very saturated colours in ways the camera's
@@ -420,6 +445,7 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | Colour after the curves (`--after-curves`, optional) | 
 | Looks on the Cinema (Yellow) / Cinema (Green) slots | tested on a GR IV 1.11: works |
 | Looks on the other slots (Vivid, Positive Film, Negative Film, Bleach Bypass, Retro, the monochrome slots) | tested on a GR IV 1.11: works |
+| Your own name for the slot (`--name`) | tested on a GR IV 1.11: works |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files
