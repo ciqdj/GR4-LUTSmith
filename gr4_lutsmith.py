@@ -2,13 +2,15 @@
 """GR4-LUTSmith: put the look of a .cube LUT into your RICOH GR IV (firmware 1.11).
 
 Fits the LUT to the camera's own look processing (a colour matrix, tone
-curves and per-hue colour sectors) and writes a firmware file that carries the result as an extra Image
-Control look. Starts from the official RICOH firmware file you downloaded
-yourself. A file is written only if every check passes.
+curves, per-hue colour sectors and, with --after-curves, a colour mix after
+the curves) and writes a firmware file that carries the result as an extra
+Image Control look. With --turns, several fits from different starting points
+are run and the good ones kept. Starts from the official RICOH firmware file
+you downloaded yourself. A file is written only if every check passes.
 
 Usage
-  python3 gr4_lutsmith.py make     LUT.cube OFFICIAL_fwdc248b.bin [--space srgb|adobe] [--photo DNG] [--no-hue] [-o DIR]
-  python3 gr4_lutsmith.py fit      LUT.cube [--space srgb|adobe] [--photo DNG] [--no-hue] [-o DIR]   (no firmware needed)
+  python3 gr4_lutsmith.py make     LUT.cube OFFICIAL_fwdc248b.bin [--space srgb|adobe] [--photo DNG] [--no-hue] [--after-curves] [--turns N] [--seed S] [-o DIR]
+  python3 gr4_lutsmith.py fit      LUT.cube [--space srgb|adobe] [--photo DNG] [--no-hue] [--after-curves] [--turns N] [--seed S] [-o DIR]   (no firmware needed)
   python3 gr4_lutsmith.py build    DIR/look.json OFFICIAL_fwdc248b.bin [-o DIR]
   python3 gr4_lutsmith.py preview  DIR/look.json PHOTO.DNG [-o sheet.jpg]   (needs rawpy, pillow)
   python3 gr4_lutsmith.py check    ANY_fwdc248b.bin
@@ -26,7 +28,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -241,8 +243,8 @@ zU3qg8t7bNmSRduicQLdbbvbdred3XS3ZffrTkFVD1e8TdWW/vdCqfovcUvGLbmtS9p69irJ9oFidFP/
 DATA = json.loads(zlib.decompress(base64.b64decode(''.join(_DATA.split()))))
 LOOK = DATA['look']
 
-# Hue sectors: [offset, original bytes, new bytes] of the changes that turn them on, and [offset, original
-# bytes] of the place that takes the look's hue-sector matrices.
+# Hue sectors: the changes that turn them on and the place that takes the look's hue-sector matrices (both
+# with their original bytes, which are checked).
 _HUE = '''
 eNrt0TtOxDAQgOG7uE4xfttcZZUicRJpCxqgQELcHe8kGGYEKy14u/FXOIks28r/prbz67qoh9PJQArRxDCoDFMA550alEk5Q66P
 47AvcNpcX+Bd+nWBjh5sAhgUmNvUjeKxZy5zuszu2Di7+q6912n/7kvZ8Ox2oDW3H/jDBcJx4F9nNY6Depxens5lfa5/fL9ccPVy
@@ -250,6 +252,15 @@ E8pNYiITGM84xoqrZjQ1mendQ1AFzc3E9O4hqAWVZmZ69xDUipamML17CGpDa7MwvXsIQsPFUYGWuE8P
 VPcegtAWmYaP3j0EoR2yjWF69xCE9sg1lvlnDzW+fwAfTUfe
 '''
 HUE = json.loads(zlib.decompress(base64.b64decode(''.join(_HUE.split()))))
+
+# Colour after the curves: the changes that turn it on, the place that takes the look's matrices (both with
+# their original bytes, which are checked), and the camera's own values for each Hue step.
+_POST = '''
+eNrtk7tuwzAMRf9FMw1c0RRN91cCD64faIYufQAFivx7JctJIAHJlKJLfYZLmhR4IZvfbj1+LbN7OhwYpoE9k1PojBDEkZtt9OhjOFBu
+aMXuN4jJzQbfBSg4NmB5LGnQlAcBIydlySqWVaes/V5/3uvzXl/3OmNss+GB3Ov48Xaclvd4Qdm8/oL5v8brRrggFW0FV9QPSrD+cw/f
+beiFUHHje8SVci+fS1peSz+mFxiZZ4urloQ8gl5fKKiDUAq2vGdqA1MKzjmKrCnK8XhTnI8DmmJC8tBcTQynH7SJIAU=
+'''
+POST = json.loads(zlib.decompress(base64.b64decode(''.join(_POST.split()))))
 
 
 def look_changes(look):
@@ -308,10 +319,54 @@ def hue_changes(look):
     return out
 
 
+def post_matrix_rows(target):
+    """The look's values for a target matrix, exact after the camera's own rounding."""
+    import itertools
+    import numpy as np
+    Y = np.array(HUE_YCC, np.int64)
+    Yi = np.linalg.inv(Y.astype(float))
+    rows = []
+    for t in target:
+        r0 = np.rint(8192 * np.asarray(t, float) @ Yi).astype(np.int64)
+        for d in itertools.product(range(-2, 3), repeat=3):
+            r = r0 + np.array(d)
+            if (((r @ Y + 4096) >> 13) == t).all():
+                rows.append(r)
+                break
+        else:
+            raise Refused('internal: colour matrix after the curves cannot be represented')
+    return np.array(rows)
+
+
+def post_changes(look):
+    """(offset, old, new, what) for the look's colour matrix after the curves."""
+    p = look.get('post_matrix_q9')
+    if not p:
+        return []
+    import numpy as np
+    p = np.array(p, int)
+    if p.shape != (3, 3) or (p.sum(1) != 512).any():
+        raise Refused('colour matrix after the curves must be 3x3 with rows summing to 512')
+    targets = post_targets(p)
+    if targets.min() < -256 or targets.max() > 255:
+        raise Refused('colour matrix after the curves is out of the camera\'s range')
+    data = b''.join(struct.pack('<9i', *post_matrix_rows(t).ravel().tolist()) for t in targets)
+    off, old = POST['matrices']
+    if len(data) * 2 != len(old):
+        raise Refused('internal: colour matrix data size')
+    return [(o, a, b, 'colour matrix after the curves') for o, a, b in POST['fixed']] + \
+        [(off, old, data.hex(), 'colour matrix after the curves')]
+
+
+DATA_WHAT = 'make the look slot available with its colour processing and defaults'
+
+
 def all_changes(look):
-    fixed = [(o, a, b, 'make the look slot available with its colour processing and defaults')
-             for o, a, b in DATA['fixed']]
-    return fixed + look_changes(look) + hue_changes(look)
+    post = post_changes(look)
+    taken = {o for o, _, _, _ in post}
+    fixed = [(o, a, b, DATA_WHAT)
+             for o, a, b in DATA['fixed'] if o not in taken]
+    return fixed + look_changes(look) + hue_changes(look) + post
 
 
 def make_firmware(source, look, log=print):
@@ -342,7 +397,7 @@ def make_firmware(source, look, log=print):
         if not (rtos[1] <= off and off + len(new) <= rtos[2]):
             raise Refused(f'change at {off:#x} is outside the RTOS section')
         buf[off:off + len(new)] = new
-    log(f'  {len(items)} changes applied ({len(items) - len(DATA["fixed"])} carry your look)')
+    log(f'  {len(items)} changes applied ({sum(w != DATA_WHAT for *_, w in items)} carry your look)')
     patched = rezero(bytes(buf))
     log('rebuilding container ...')
     changed = differences(payload, patched)
@@ -397,12 +452,15 @@ def identify(data, log=print):
     if digest in names:
         log(f'file     {names[digest]}')
         return 0
-    fixed_ok = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in DATA['fixed'])
+    post = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in POST['fixed'])
+    post_rows = {o for o, _, _ in POST['fixed']} if post else set()
+    fixed_ok = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in DATA['fixed']
+                   if o not in post_rows)
     if fixed_ok:
         m = struct.unpack_from('<9h', payload, LOOK['matrix'][0])
         hue = all(payload[o:o + len(bytes.fromhex(b))] == bytes.fromhex(b) for o, _, b in HUE['fixed'])
         log(f'file     a GR4-LUTSmith firmware (look matrix {[list(m[i:i + 3]) for i in (0, 3, 6)]}; '
-            f'hue sectors: {"yes" if hue else "no"})')
+            f'hue sectors: {"yes" if hue else "no"}; colour after the curves: {"yes" if post else "no"})')
         return 0
     log('file     unknown - not the official 1.11 file and not made by GR4-LUTSmith')
     return 1
@@ -607,10 +665,70 @@ def render(v, look, bounds=None):
     if q:
         z = hue_apply_q(z, np.array(q), HUE_BOUNDS if bounds is None else bounds)
     ex = exported(look.get('curves'))
-    return np.stack([np.interp(np.clip(z[:, c], 0, 255), np.arange(256.), ex[c]) / 1023 for c in range(3)], 1)
+    out = np.stack([np.interp(np.clip(z[:, c], 0, 255), np.arange(256.), ex[c]) / 1023 for c in range(3)], 1)
+    p = look.get('post_matrix_q9')
+    if p:
+        out = np.clip(out @ post_effective(p).T, 0, 1)
+    return out
+
+
+# ------------------------------------------------------------------ colour after the tone curves
+# The camera can mix the colours once more after the tone curves: a 3x3 matrix P whose rows sum to 1, so greys
+# stay grey. Film looks often treat colours differently in shadows and highlights; a mix after the curves can
+# follow that where the colour matrix before them cannot. Every Hue step is set, each with the camera's own Hue
+# change on top of the look.
+POST_LIMIT = 0.98         # the camera's values beyond this are penalised while fitting (keeps them in range)
+POST_PHOTO_WEIGHTS = (0.5, 2.0, 8.0)    # photo and grey weights tried, so everyday content can count for more
+POST_WARM_LR = 1e-3                     # smaller steps when continuing from a fitted look
+
+
+def post_hue(h):
+    """The camera's own values for Hue step h (0..8, 4 = Hue 0)."""
+    import numpy as np
+    a, s, d = POST['hue'][h]
+    return np.array([[8192, 0, 0], [0, a, s], [0, -s, d]], np.int64)
+
+
+def post_targets(p_q9):
+    """The camera's nine matrices (one per Hue step) for P; the look is shown at Hue 0 (step 4), the other
+    steps are kept within the camera's range."""
+    import numpy as np
+    P = np.array(p_q9, float) / 512
+    Y = np.array(HUE_YCC, np.int64)
+    out = []
+    for h in range(9):
+        H = post_hue(h) @ Y / 8192                             # the camera's own matrix at this Hue step
+        exact = H @ P
+        t = np.rint(exact).astype(int)
+        for r in range(3):                                     # rows keep their sums: greys stay grey
+            d = int(np.rint(H[r].sum())) - t[r].sum()
+            while d:
+                j = int(np.argmax((exact[r] - t[r]) * np.sign(d)))
+                t[r, j] += np.sign(d)
+                d -= np.sign(d)
+        out.append(t if h == 4 else np.clip(t, -256, 255))
+    return np.array(out)
+
+
+def post_effective(p_q9):
+    """P as the camera really applies it at Hue 0, after rounding."""
+    import numpy as np
+    return np.linalg.solve(np.array(HUE_YCC, float), post_targets(p_q9)[4].astype(float))
+
+
+def post_quantise(P):
+    import numpy as np
+    q = np.rint(np.asarray(P) * 512).astype(int)
+    for r in range(3):
+        q[r, r] += 512 - q[r].sum()
+    t = post_targets(q)
+    if t.min() < -256 or t.max() > 255:
+        raise Refused(f'colour matrix after the curves is out of the camera\'s range ({t.min()}..{t.max()})')
+    return q
 
 
 # ------------------------------------------------------------------ fitting
+START_SPREAD = dict(matrix=0.1, curve=0.25, after=0.03)   # how far a random start (turns, --seed) may lie
 CHANNELS = {'single': [0, 0, 0], 'rg-b': [0, 0, 1], 'r-gb': [0, 1, 1], 'rb-g': [0, 1, 0], 'rgb': [0, 1, 2]}
 
 
@@ -622,15 +740,16 @@ def _softplus(x):
 class Fitter:
     """Gradient descent (Adam) on a perceptual colour difference.
 
-    Model: out_c = C_c[ T(M v)_c ] with M a white-preserving 3x3 matrix, T the slot's
-    base curve and C_c one or two free non-decreasing curves. Loss per colour: a
+    Model: out = P . C[ T(M v) ] with M a white-preserving 3x3 matrix, T the slot's
+    base curve, C one, two or three free non-decreasing curves (curve mode) and, with
+    post, P a colour mix after the curves (rows sum to 1; otherwise P = I). Loss per colour: a
     CIE94/CIEDE2000-style weighted Lab distance in the target's lightness/chroma/hue
     frame, sqrt'ed so it behaves like ΔE; plus a smoothness penalty on the curves.
     """
 
-    def __init__(self, v, target, mode='single', smooth=50.0, weight=None):
+    def __init__(self, v, target, mode='single', smooth=50.0, weight=None, post=False):
         import numpy as np
-        self.v, self.mode, self.smooth = v, mode, smooth
+        self.v, self.mode, self.smooth, self.post = v, mode, smooth, post
         w = np.ones(len(v)) if weight is None else np.asarray(weight, float)
         self.w = w / w.sum()                                          # per-colour weights, sum 1
         self.chan = CHANNELS[mode]
@@ -648,7 +767,7 @@ class Fitter:
         import numpy as np
         return np.cumsum(_softplus(raw), 1)
 
-    def loss_grad(self, theta, raw):
+    def loss_grad(self, theta, raw, phi=None):
         import numpy as np
         v, N = self.v, len(self.v)
         M = np.concatenate([theta, 1 - theta.sum(1, keepdims=True)], 1)
@@ -667,6 +786,10 @@ class Fitter:
         c0, c1 = Cc[rows, j], Cc[rows, j + 1]
         out = c0 * (1 - g) + c1 * g
         mi = (b * 256 > 0) & (b * 256 < 255)
+        cur = out
+        if phi is not None:                                          # colour matrix after the curves
+            P = np.concatenate([phi, 1 - phi.sum(1, keepdims=True)], 1)
+            out = cur @ P.T
         # Lab of the prediction
         x = np.clip(out, 0, 1)
         lin = np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4)
@@ -692,6 +815,16 @@ class Fitter:
         gt = gF * dF / np.array(WHITE)
         glin = gt @ np.array(XYZ)
         gout = glin * dlin
+        gphi = None
+        if phi is not None:
+            gphi = np.stack([(gout * (cur[:, 0:1] - cur[:, 2:3])).sum(0), (gout * (cur[:, 1:2] - cur[:, 2:3])).sum(0)], 1)
+            Y = np.array(HUE_YCC, float) / 256
+            YP = Y @ P
+            over = np.maximum(np.abs(YP) - POST_LIMIT, 0) * np.sign(YP)
+            gP = Y.T @ (2 * HUE_RANGE * over)
+            gphi += gP[:, :2] - gP[:, 2:3]
+            loss_pen = HUE_RANGE * (over ** 2).sum()
+            gout = gout @ P
         # through the look curves
         gC = np.zeros_like(Ck)
         for c in range(3):
@@ -710,11 +843,23 @@ class Fitter:
         gC[:, :-2] += gD
         sig = 1 / (1 + np.exp(-raw))
         graw = sig * np.cumsum(gC[:, ::-1], 1)[:, ::-1]
-        return loss + pen, loss, gtheta, graw
+        if phi is not None:
+            pen += loss_pen
+        return loss + pen, loss, gtheta, graw, gphi
 
-    def run(self, target, iters=1500, lr=5e-3, log=None):
+    def run(self, target, iters=1500, lr=5e-3, log=None, init=None, rng=None):
+        """init: continue from a fitted look (same curve mode); rng: a random start (a different
+        starting point for each seed) instead of the classic one; neither: the classic start."""
         import numpy as np
         v = self.v
+        if init is not None:                         # continue from a fitted look (same curve mode)
+            M0 = np.array(init['matrix_q13'], float) / 8192
+            theta = M0[:, :2].copy()
+            first = [self.chan.index(k) for k in range(max(self.chan) + 1)]
+            C0 = np.array(init['curves'], float)[first] / 16384
+            dd = np.clip(np.diff(np.concatenate([np.zeros((len(C0), 1)), C0], 1), axis=1), 1e-6, None)
+            raw = np.log(np.expm1(dd))
+            return self._descend(theta, raw, iters, lr, log)
         # least-squares start for the matrix, identity start for the curves
         inv_t = inverse(self.T, target)
         theta = np.zeros((3, 2))
@@ -726,12 +871,30 @@ class Fitter:
         ident = np.arange(256) / 256.0
         dd = np.clip(np.diff(np.concatenate([[0.0], ident])), 1e-6, None)
         raw = np.tile(np.log(np.expm1(dd)), (max(self.chan) + 1, 1))
-        state = [[np.zeros_like(p), np.zeros_like(p)] for p in (theta, raw)]
+        phi = None
+        if rng is not None:                      # a random start around the classic one
+            theta = theta + rng.normal(0, START_SPREAD['matrix'], theta.shape)
+            n = max(self.chan) + 1
+            g = np.exp(rng.normal(0, START_SPREAD['curve'], n))[:, None]      # a random gamma per curve
+            dd = np.clip(np.diff(np.concatenate([np.zeros((n, 1)), np.tile(ident, (n, 1)) ** g], 1), axis=1), 1e-6, None)
+            raw = np.log(np.expm1(dd))
+            if self.post:
+                phi = np.array([[1., 0.], [0., 1.], [0., 0.]]) + rng.normal(0, START_SPREAD['after'], (3, 2))
+        return self._descend(theta, raw, iters, lr, log, phi)
+
+    def _descend(self, theta, raw, iters, lr, log, phi=None):
+        import numpy as np
+        if self.post and phi is None:
+            phi = np.array([[1., 0.], [0., 1.], [0., 0.]])
+        elif not self.post:
+            phi = None
+        params = (theta, raw) + ((phi,) if self.post else ())
+        state = [[np.zeros_like(p), np.zeros_like(p)] for p in params]
         hist = []
         for it in range(iters):
-            total, loss, gt, gr = self.loss_grad(theta, raw)
+            total, loss, gt, gr, gp_ = self.loss_grad(theta, raw, phi)
             a = lr * 0.5 * (1 + math.cos(math.pi * it / iters))
-            for p, gp, st in ((theta, gt, state[0]), (raw, gr, state[1])):
+            for p, gp, st in zip(params, (gt, gr, gp_), state):
                 st[0] = 0.9 * st[0] + 0.1 * gp
                 st[1] = 0.999 * st[1] + 0.001 * gp ** 2
                 mh, vh = st[0] / (1 - 0.9 ** (it + 1)), st[1] / (1 - 0.999 ** (it + 1))
@@ -745,8 +908,11 @@ class Fitter:
         q[:, 2] = 8192 - q[:, 0] - q[:, 1]
         Ck = np.clip(np.round(self.curves(raw) * 16384), 0, 16383).astype(int)
         Ck = np.maximum.accumulate(Ck, axis=1)
-        return dict(matrix_q13=q.tolist(), curve_mode=self.mode,
-                    curves=[Ck[k].tolist() for k in self.chan], history=hist)
+        out = dict(matrix_q13=q.tolist(), curve_mode=self.mode,
+                   curves=[Ck[k].tolist() for k in self.chan], history=hist)
+        if self.post:
+            out['post_matrix_q9'] = post_quantise(np.concatenate([phi, 1 - phi.sum(1, keepdims=True)], 1)).tolist()
+        return out
 
 
 # ------------------------------------------------------------------ hue sectors
@@ -755,7 +921,7 @@ class Fitter:
 # colours) and greys unchanged, and keeps colours near a sector edge smooth (HUE_BUDGET).
 HUE_BOUNDS = [359.8, 27.4, 62.2, 92.6, 112.0, 142.8, 179.2, 211.4, 238.6, 267.2, 306.0, 326.5]
 HUE_SIGMA = [1.0, 2.5, 2.5, 1.0, 1.0, 2.5, 2.5, 2.0, 1.0, 2.0, 5.0, 3.0]
-HUE_YCC = [[77, 150, 29], [-43, -85, 128], [128, -107, -21]]          # /256
+HUE_YCC = [[77, 150, 29], [-43, -85, 128], [128, -107, -21]]          # /256; also for colour after the curves
 HUE_KINKS = (0.3, 1, 3, 10, 30, 100)          # seam penalty, weakest first; the first within budget is used
 HUE_BUDGET = dict(photo_p99=0.3, photo_max=1.0, lattice_p99=1.0)
 HUE_PHOTO_WEIGHTS = (0.5, 2.0, 8.0)          # weights tried for the photo
@@ -838,6 +1004,8 @@ class HueFitter:
         self.g, self.a, self.b = hue_coords(self.z, HUE_BOUNDS)
         cv = look.get('curves')
         self.C = np.array(cv, float) / 16384 if cv else np.tile(np.arange(256) / 256.0, (3, 1))
+        pq = look.get('post_matrix_q9')
+        self.P = post_effective(pq) if pq else None
         K = hue_kinks()
         self.KtK = K.T @ K
         self.B = np.array([hue_matrices(e.reshape(12, 3)).ravel() - hue_matrices(np.zeros((12, 3))).ravel()
@@ -861,6 +1029,8 @@ class HueFitter:
         c0, c1 = self.C[rows, j], self.C[rows, j + 1]
         out = c0 * (1 - gg) + c1 * gg
         mi = (bb * 256 > 0) & (bb * 256 < 255)
+        if self.P is not None:
+            out = out @ self.P.T
         x = np.clip(out, 0, 1)
         lin = np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4)
         dlin = np.where(x <= 0.04045, 1 / 12.92, 2.4 / 1.055 * ((x + 0.055) / 1.055) ** 1.4) * ((out > 0) & (out < 1))
@@ -878,6 +1048,8 @@ class HueFitter:
                                (w * 2)[:, None] * ((dC / f.SC ** 2)[:, None] * f.u + (dH / f.SH ** 2)[:, None] * f.h)], 1)
         gout = ((gLab @ np.array([[0, 116, 0], [500, -500, 0], [0, 200, -200]], float)) * dF / np.array(WHITE)
                 @ np.array(XYZ)) * dlin
+        if self.P is not None:
+            gout = gout @ self.P
         gz = gout * (c1 - c0) * mi * 256 * f.Tslope[i] * mz
         gD = np.zeros((12, 3))
         np.add.at(gD, self.g, self.a[:, None] * gz)
@@ -1058,7 +1230,8 @@ def apply_lut(lut, y, space):
 PAIR_GAIN, HELD_TOL, PHOTO_GAIN = 0.10, 0.02, 0.5
 PHOTO_WEIGHT = 0.5      # the photo counts half as much as the LUT's own colours, however many pixels it has
 GREY_WEIGHT = 0.5       # neutral greys count half as much too: a colour cast on greys is the most visible error
-GREY_TOL, CC_TOL = 0.10, 0.10            # more curves must not make greys or the ColorChecker worse by more
+GREY_TOL, CC_TOL = 0.10, 0.10            # more levers must not make greys or the ColorChecker worse by more;
+                                         # these, RANGE_TOL and HELD_TOL are also the margins when comparing results
 GREY_GAIN, RANGE_TOL = 0.5, 0.05         # ... and count as a gain when greys improve by 0.5 (range within 5 %)
 EVERYDAY_CC, EVERYDAY_GREY, EVERYDAY_CAST = 2.0, 2.0, 2.5
 # "good on everyday colours": ColorChecker mean < 2 and greys < 2 (a small visible difference at most),
@@ -1099,8 +1272,12 @@ def everyday(look, lut, space):
     return out
 
 
-def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print, hue=True):
+def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print, hue=True, post=False, seed=None):
+    """One turn of fitting. seed None: the classic start; a number: a random start (reproducible).
+    With post, the result also carries 'after_curves': the version with colour after the curves, when it
+    is better than the usual one on at least one measure."""
     import numpy as np
+    rng = None if seed is None else np.random.default_rng(seed)
     lut = Lut(path)
     if lut.lo.tolist() == [0, 0, 0] and lut.hi.tolist() == [1, 1, 1]:
         y = grid(lut.n)
@@ -1119,6 +1296,7 @@ def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print,
     t = np.concatenate([t, apply_lut(lut, gy, space)])
     weight = np.concatenate([np.ones(len(y)) / len(y), np.full(len(gy), GREY_WEIGHT / len(gy))])
     held = None
+    n_fixed = len(v)
     if photo:
         img = photo_signal(photo)
         top = np.zeros(img.shape[:2], bool)
@@ -1134,17 +1312,26 @@ def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print,
         held = (yb[ok & ~top], tb[ok & ~top])
         log(f'  photo: {int((ok & top).sum())} pixels join the fit, {int((ok & ~top).sum())} are held out')
 
-    def one(mode):
-        look = Fitter(v, t, mode, weight=weight).run(t, iters=iters)
+    def one(mode, post=False, photo_weight=PHOTO_WEIGHT, init=None):
+        w = weight
+        if photo_weight != PHOTO_WEIGHT:                 # the photo and the greys together (everyday content)
+            w = np.asarray(weight, float).copy()
+            w[n_fixed - len(gy):] *= photo_weight / PHOTO_WEIGHT
+        try:
+            look = Fitter(v, t, mode, weight=w, post=post).run(t, iters=iters, init=init, rng=None if init else rng,
+                                                              lr=5e-3 if init is None else POST_WARM_LR)
+        except Refused as exc:
+            log(f'  {mode} + colour after the curves: {exc}')
+            return None
         e = evaluate(look, y, ty)['de00_mean']
         h = evaluate(look, *held)['de00_mean'] if held else None
         ev = everyday(look, lut, space)
-        log(f'  {mode:7s} ΔE00 {e:.3f}' + (f'  photo {h:.3f}' if h is not None else '')
+        log(f'  {mode + (f" + after (photo {photo_weight}{"" if init else ", from scratch"})" if post else ""):7s} ΔE00 {e:.3f}' + (f'  photo {h:.3f}' if h is not None else '')
             + f'  ColorChecker {ev["colorchecker"]["de00_mean"]:.3f}  greys {ev["greys"]["de00_mean"]:.3f}')
         return dict(e=e, h=h, cc=ev['colorchecker']['de00_mean'], grey=ev['greys']['de00_mean'], look=look)
     def better(new, old):
-        """More curves only when they clearly help (whole range, everyday colours or greys)
-        and make nothing worse (photo, greys, ColorChecker, whole range)."""
+        """More levers (curves, colour after the curves) only when they clearly help (whole range,
+        everyday colours or greys) and make nothing worse (photo, greys, ColorChecker, whole range)."""
         gain = (new['e'] < old['e'] * (1 - PAIR_GAIN) or new['cc'] < old['cc'] * (1 - PAIR_GAIN)
                 or new['grey'] <= old['grey'] - GREY_GAIN)
         no_worse = ((old['h'] is None or new['h'] <= old['h'] + HELD_TOL) and new['grey'] <= old['grey'] + GREY_TOL
@@ -1162,21 +1349,77 @@ def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print,
         use = min((one(m) for m in ('rg-b', 'r-gb', 'rb-g')), key=lambda r: r['e'])
     else:
         use = one(curve)
-    look = use['look']
-    if hue:
-        sectors = fit_hue(look, v, t, weight, len(y) + len(gy), y, ty, held, lut, space, log=log)
-        if sectors:
-            look = dict(look, hue_sectors=sectors)
-    scores = dict(fit=evaluate(look, y, ty), unchanged=unchanged(y, ty), **everyday(look, lut, space))
-    if held:
-        scores['photo'] = evaluate(look, *held)
-        scores['photo_unchanged'] = unchanged(*held)
-    ok, why = decide(scores)
-    return dict(tool=f'GR4-LUTSmith {VERSION}', lut=dict(file=str(Path(path).resolve()), sha256=lut.sha256, kind=lut.kind,
-                                                          title=lut.title, space=space),
-                matrix_q13=look['matrix_q13'], curve_mode=look['curve_mode'], curves=look['curves'],
-                hue_sectors=look.get('hue_sectors'),
-                scores=scores, decision=dict(build=ok, reason=why), fit=dict(iters=iters, history=look['history']))
+
+    def with_hue(lk):
+        if hue:
+            sectors = fit_hue(lk, v, t, weight, n_fixed, y, ty, held, lut, space, log=log)
+            if sectors:
+                lk = dict(lk, hue_sectors=sectors)
+        return lk
+
+    def summary(lk):
+        ev = everyday(lk, lut, space)
+        return dict(e=evaluate(lk, y, ty)['de00_mean'], h=evaluate(lk, *held)['de00_mean'] if held else None,
+                    cc=ev['colorchecker']['de00_mean'], grey=ev['greys']['de00_mean'], look=lk)
+    look = with_hue(use['look'])
+    alt = None
+    if post:                    # a colour matrix after the curves: a second version when it improves anything
+        found = []
+        starts = [(pw, use['look']) for pw in (POST_PHOTO_WEIGHTS if held else POST_PHOTO_WEIGHTS[:1])]
+        for pw, init in starts + [(PHOTO_WEIGHT, None)]:      # from the fitted look, and once from scratch
+            p = one(use['look']['curve_mode'], post=True, photo_weight=pw, init=init)
+            if p:
+                found.append(p)
+        pool = [p for p in found if better(p, use)] or [p for p in found if changes(p, use)[0]]
+        if pool:
+            final, base = summary(with_hue(min(pool, key=lambda r: r['e'])['look'])), summary(look)
+            gained, lost = changes(final, base)
+            if gained:
+                alt = dict(look=final['look'], recommended=better(final, base), better=gained, worse=lost)
+        if alt:
+            log(f'  colour after the curves: better {", ".join(alt["better"])}'
+                + (f'; worse {", ".join(alt["worse"])}' if alt['worse'] else '')
+                + ('  (recommended)' if alt['recommended'] else ''))
+        else:
+            log('  colour after the curves: no gain, not kept')
+
+    def record(lk):
+        scores = dict(fit=evaluate(lk, y, ty), unchanged=unchanged(y, ty), **everyday(lk, lut, space))
+        if held:
+            scores['photo'] = evaluate(lk, *held)
+            scores['photo_unchanged'] = unchanged(*held)
+        scores['fit_score'] = fit_score(lk, v, t, weight)
+        ok, why = decide(scores)
+        return dict(tool=f'GR4-LUTSmith {VERSION}', seed=seed,
+                    lut=dict(file=str(Path(path).resolve()), sha256=lut.sha256,
+                             kind=lut.kind, title=lut.title, space=space),
+                    matrix_q13=lk['matrix_q13'], curve_mode=lk['curve_mode'], curves=lk['curves'],
+                    hue_sectors=lk.get('hue_sectors'), post_matrix_q9=lk.get('post_matrix_q9'),
+                    scores=scores, decision=dict(build=ok, reason=why), fit=dict(iters=iters, history=lk['history']))
+    out = record(look)
+    if alt:
+        out['after_curves'] = dict(record(alt['look']), recommended=alt['recommended'],
+                                   compared=dict(better=alt['better'], worse=alt['worse']))
+    return out
+
+
+def fit_score(look, v, t, weight):
+    """What the fit itself aims at: the weighted average ΔE00 over the LUT's colours, the greys and the part
+    of the photo used for fitting (the other part of the photo stays a fair check)."""
+    import numpy as np
+    w = np.asarray(weight, float)
+    return round(float((w * de00(lab(t), lab(np.clip(render(v, look), 0, 1)))).sum() / w.sum()), 4)
+
+
+MEASURES = (('e', 'whole range'), ('cc', 'ColorChecker'), ('grey', 'greys'), ('h', 'photo'))
+
+
+def changes(new, old):
+    """Measures that got clearly better / worse: by more than RANGE_TOL (relative), CC_TOL, GREY_TOL or HELD_TOL."""
+    tol = dict(e=old['e'] * RANGE_TOL, cc=CC_TOL, grey=GREY_TOL, h=HELD_TOL)
+    better = [name for k, name in MEASURES if old.get(k) is not None and new[k] < old[k] - tol[k]]
+    worse = [name for k, name in MEASURES if old.get(k) is not None and new[k] > old[k] + tol[k]]
+    return better, worse
 
 
 def decide(scores):
@@ -1212,7 +1455,101 @@ def describe(look, log=print):
         log(f'  everyday colours: ColorChecker ΔE00 {cc["de00_mean"]} (skin {cc["skin"]}, worst {cc["worst"]}); '
             f'greys {gr["de00_mean"]} (largest cast {gr["cast_max"]})')
     hs = look.get('hue_sectors')
-    log(f'  curves: {look["curve_mode"]}; hue sectors: {"yes" if hs else "no"}; decision: {look["decision"]["reason"]}')
+    log(f'  curves: {look["curve_mode"]}; hue sectors: {"yes" if hs else "no"}; '
+        f'colour after the curves: {"yes" if look.get("post_matrix_q9") else "no"}; decision: {look["decision"]["reason"]}')
+
+
+TURNS_DIR = 'turns'           # every kept result gets a folder here when there is more than one
+
+
+def measures(rec):
+    sc = rec['scores']
+    return dict(e=sc['fit']['de00_mean'], cc=sc['colorchecker']['de00_mean'], grey=sc['greys']['de00_mean'],
+                h=sc['photo']['de00_mean'] if 'photo' in sc else None)
+
+
+def keep(kept, new):
+    """The list of results worth keeping. A new result joins unless a kept one is at least as good on every
+    measure; kept results that the new one beats on every measure leave the list.
+    Returns (list, joined, results that left)."""
+    m = measures(new)
+    if any(not changes(m, measures(k))[0] for k in kept):
+        return kept, False, []
+    stay = [k for k in kept if changes(measures(k), m)[0]]
+    return stay + [new], True, [k for k in kept if not any(k is x for x in stay)]
+
+
+def result_name(rec):
+    return f'turn-{rec["turn"]}' + ('-after-curves' if rec.get('post_matrix_q9') else '')
+
+
+def recommended(kept):
+    """The kept result the fit itself scores best (see fit_score)."""
+    return min(kept, key=lambda r: r['scores']['fit_score'])
+
+
+def show_kept(kept, log=print):
+    best = recommended(kept)
+    log(f'\n  kept results ({len(kept)}), ΔE00, lower is closer to the LUT:')
+    log(f'    {"result":24s} {"whole range":>11s} {"ColorChecker":>12s} {"greys":>6s} {"photo":>6s} {"fit score":>9s}')
+    for r in sorted(kept, key=lambda r: r['scores']['fit_score']):
+        m = measures(r)
+        log(f'    {result_name(r):24s} {m["e"]:11.2f} {m["cc"]:12.2f} {m["grey"]:6.2f} '
+            + (f'{m["h"]:6.2f}' if m['h'] is not None else f'{"-":>6s}')
+            + f' {r["scores"]["fit_score"]:9.3f}' + ('   recommended' if r is best else ''))
+    if len(kept) > 1:
+        log('  each kept result is better than every other one on at least one measure; the recommended one has\n'
+            '  the best fit score. Preview them on your own photo and pick the one you like.')
+
+
+def run_turns(a, n, state, post, log=print):
+    """Run n more turns (post: with colour after the curves) and update state (kept list, history, seeds)."""
+    import secrets
+    for _ in range(n):
+        k = len(state['history_turns']) + 1
+        if a.seed is not None:
+            seed = a.seed + k - 1
+        else:
+            seed = None if k == 1 else secrets.randbelow(2 ** 31)
+        log(f'\nturn {k} ({"classic start" if seed is None else f"random start, seed {seed}"}'
+            + (', with colour after the curves)' if post else ')'))
+        res = fit_lut(a.lut, a.space, a.curve, a.photo, a.iters, hue=not a.no_hue, post=post, seed=seed)
+        alt = res.pop('after_curves', None)
+        state['history_turns'].append(dict(seed=seed, after_curves=post))
+        for rec in (res, alt):
+            if rec is None:
+                continue
+            for x in ('recommended', 'compared'):
+                rec.pop(x, None)
+            rec['turn'] = k
+            state['kept'], joined, left = keep(state['kept'], rec)
+            state['history'].append(dict(result=result_name(rec), seed=seed, kept_when_found=joined,
+                                         fit_score=rec['scores']['fit_score'], **measures(rec)))
+            log(f'  {result_name(rec)}: ' + ('kept' if joined else 'not kept (an earlier result is at least as good '
+                                                                   'on every measure)'))
+            for x in left:
+                log(f'  {result_name(x)} leaves the list ({result_name(rec)} is better on every measure)')
+
+
+def ask_more_turns(post):
+    """Ask for more turns when someone is at the terminal. Returns (number, with colour after the curves);
+    0 means stop. A plain number runs turns as the run started (post); 'a' adds turns with colour after the curves,
+    'b' turns without it (before the curves only)."""
+    if not sys.stdin.isatty():
+        return 0, post
+    while True:
+        try:
+            ans = input('\nMore turns? Type a number (e.g. 2), add "a" for turns with colour after the curves (2a) '
+                        'or "b" for turns without it (2b); or press Enter to keep these results: ').strip().lower()
+        except EOFError:
+            return 0, post
+        if not ans:
+            return 0, post
+        kind = ans[-1] if ans[-1] in 'ab' else ''
+        num = ans[:-1].strip() if kind else ans
+        if num.isdigit():
+            return int(num), (post if not kind else kind == 'a')
+        print('please type a whole number, optionally followed by a or b, or press Enter')
 
 
 def load_look(path):
@@ -1274,6 +1611,11 @@ def main(argv=None):
         p.add_argument('--photo', type=Path, help='a DNG from your GR IV: judges the fit on real content (needs rawpy)')
         p.add_argument('--curve', choices=('auto', 'single', 'pair', 'rgb'), default='auto', help=argparse.SUPPRESS)
         p.add_argument('--no-hue', action='store_true', help='do not use hue sectors (colour changes per hue)')
+        p.add_argument('--turns', type=int, default=1,
+                       help='how many fits to run; each extra turn starts from a new random point (default 1)')
+        p.add_argument('--seed', type=int, help='run turns from this seed (repeats a turn shown earlier)')
+        p.add_argument('--after-curves', action='store_true',
+                       help='also try a colour mix after the tone curves; keeps a second version when it helps')
         p.add_argument('--iters', type=int, default=1500, help=argparse.SUPPRESS)
     m = sub.add_parser('make', help='LUT + official firmware -> firmware with the look')
     lut_args(m)
@@ -1324,22 +1666,51 @@ def main(argv=None):
                 source = a.input.read_bytes()
                 if sha256(source) != OFFICIAL_SHA256:
                     make_firmware(source, dict(matrix_q13=[[8192, 0, 0], [0, 8192, 0], [0, 0, 8192]]))
-                if (out_dir / 'fwdc248b.bin').exists():
-                    raise Refused(f'{out_dir / "fwdc248b.bin"} already exists; choose another output directory')
-            look = fit_lut(a.lut, a.space, a.curve, a.photo, a.iters, hue=not a.no_hue)
-            describe(look)
-            out_dir.mkdir(parents=True, exist_ok=True)
-            (out_dir / 'look.json').write_text(json.dumps(look, indent=1) + '\n')
-            print(f'wrote {out_dir / "look.json"}')
+                if (out_dir / 'fwdc248b.bin').exists() or (out_dir / TURNS_DIR).exists():
+                    raise Refused(f'{out_dir} already has results; choose another output directory')
+            if a.turns < 1:
+                raise Refused('--turns must be at least 1')
+            state = dict(kept=[], history=[], history_turns=[])
+            n, post = a.turns, a.after_curves
+            while n:
+                run_turns(a, n, state, post)
+                show_kept(state['kept'])
+                n, post = ask_more_turns(a.after_curves)
+            kept, best = state['kept'], recommended(state['kept'])
+            print(f'\nrecommended: {result_name(best)}')
+            describe(best)
+            places = [(best, out_dir)]
+            if len(kept) > 1:
+                places += [(r, out_dir / TURNS_DIR / result_name(r)) for r in kept]
+            for r, d in places:
+                d.mkdir(parents=True, exist_ok=True)
+                (d / 'look.json').write_text(json.dumps(r, indent=1) + '\n')
+            if len(state['history']) > 1:
+                (out_dir / 'turns.json').write_text(json.dumps(dict(
+                    turns=[dict(turn=i + 1, **t) for i, t in enumerate(state['history_turns'])],
+                    results=state['history'], kept=[result_name(r) for r in kept],
+                    recommended=result_name(best)), indent=1) + '\n')
+            print(f'wrote {out_dir / "look.json"}' + (f' (and {len(kept)} kept results in {out_dir / TURNS_DIR})'
+                                                     if len(kept) > 1 else ''))
             if a.cmd == 'fit':
                 return 0
-            if not look['decision']['build'] and not a.force:
+            build = [(r, d) for r, d in places if r['decision']['build'] or a.force]
+            if not build:
                 raise Refused('the LUT cannot be reproduced well by the camera (see above); '
                               'use --force to build anyway')
-            data = make_firmware(source, look)
-            target = write_atomic(data, out_dir)
-            print(f'wrote {target}  (SHA-256 {sha256(data)})')
-            print('Copy this file to the root of the SD card and run the camera\'s firmware update.')
+            for r, d in places:
+                if not (r['decision']['build'] or a.force):
+                    print(f'not built: {d} (the camera cannot reproduce this result well; --force builds it)')
+            made = {}
+            for r, d in build:
+                if id(r) not in made:                          # the recommended result is also in turns/
+                    made[id(r)] = make_firmware(source, r)
+                data = made[id(r)]
+                target = write_atomic(data, d)
+                print(f'wrote {target}  (SHA-256 {sha256(data)})')
+            print('Copy one of these files to the root of the SD card and run the camera\'s firmware update.'
+                  if len(build) > 1 else
+                  'Copy this file to the root of the SD card and run the camera\'s firmware update.')
             return 0
         if a.cmd == 'build':
             look = load_look(a.look)

@@ -110,6 +110,9 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
 
 - Add `--space adobe` if the LUT was made for Adobe RGB.
 - `--photo` is optional, but recommended.
+- `--turns 3` (optional) runs three fits and keeps the best ones: see
+  [More turns](#more-turns).
+- `--after-curves` is optional: see [Colour after the curves](#colour-after-the-curves).
 
 The tool:
 
@@ -188,6 +191,87 @@ the greys, the ColorChecker). The result line says `hue sectors: yes` or `no`.
 - With `--photo` the hue sectors are tuned for real content too (recommended).
 - `--no-hue` turns them off (`make` and `fit`).
 
+## Colour after the curves
+
+With `--after-curves` (`make` and `fit`), the tool also tries a second colour
+mix that the camera applies **after** the tone curves. Many film looks change
+colours differently in shadows and highlights. The usual colour mix acts before
+the curves, so it cannot follow that, but a mix after the curves often can.
+
+The LUT's whole colour range and real photos do not always agree: a version can
+be much closer on saturated colours and a little further on an everyday photo.
+So both versions go into the list of kept results described in
+[More turns](#more-turns): the version with colour after the curves is kept
+whenever it is better on anything (the whole range, the ColorChecker, the greys
+or your photo), next to the usual one, and you choose. Preview both on your own
+photo before choosing.
+
+**Why it is optional.** See [Which helps more](#which-helps-more): more turns of
+the usual fit are the bigger lever. The mix after the curves helps on average,
+but it makes every turn several minutes longer.
+
+- Greys stay grey: the mix never adds a colour cast to a neutral grey.
+- Fitting takes several minutes longer (four extra fits).
+- In our tests on 24 LUTs (one turn each), the usual version stayed exactly as
+  before, and 23 LUTs got a second version:
+  - **8 better on everything that changed**: there the average difference to
+    the LUT fell from 3.7 to 2.4 (ColorChecker 1.9 → 1.1, photo 0.91 → 0.75);
+  - **15 with a trade-off**. Colour film looks usually get much
+    closer on the whole range and the ColorChecker (e.g. 3.6 → 2.5) with a
+    slightly worse photo (by up to 0.17); monochrome looks usually get much
+    closer on greys and the photo, but further on the whole range;
+  - two LUTs that were refused before can now be built.
+
+## More turns
+
+Fitting starts from a starting point and improves from there. The camera has
+only a few colour controls, so **where the fit starts often decides how close it
+gets**. With `--turns`, the tool runs several fits ("turns"), each from a new
+random starting point, and keeps the good ones:
+
+```sh
+uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001234.DNG --turns 3
+```
+
+- Turn 1 always uses the usual starting point, so one turn (the default) gives
+  the same result as before. Every further turn draws a new random start.
+- Each turn takes as long as a normal fit (a few minutes).
+- **Kept results.** A new result is kept unless an earlier one is at least as
+  good on every measure (the whole range, the ColorChecker, the greys and your
+  photo). An earlier result that the new one beats on every measure leaves the
+  list. So every kept result is better than all the others on at least one
+  measure; the tool shows them side by side and recommends the one with the best
+  overall score (the average difference on everything the fit uses).
+- **Add turns at the end.** When the results come up, the tool asks
+  `More turns?`. Type a number to run that many more, the same way the run
+  started (`2`); add `a` for turns with
+  [colour after the curves](#colour-after-the-curves) (`2a`), or `b` for turns
+  without it (`2b`), whichever way the run started. New turns are compared with
+  all kept results. Press Enter to keep what you have.
+- **Repeat a turn.** Every turn's seed is shown and saved in `turns.json`;
+  `--seed 1234` runs the same turn again (with `--turns 3`: seeds 1234, 1235,
+  1236).
+
+With more than one kept result, the output folder looks like this:
+
+```
+output/my_look/look.json, fwdc248b.bin      the recommended result
+output/my_look/turns/turn-1/                 every kept result, each with its
+output/my_look/turns/turn-3-after-curves/    own look.json (and, with make, fwdc248b.bin)
+output/my_look/turns.json                    every turn, its seed and its scores
+```
+
+To use another kept result, copy its `fwdc248b.bin` to the SD card instead.
+
+### Which helps more
+
+In a test with the same fitting time, the best of four turns of the usual fit,
+continued, beat a fit with [colour after the curves](#colour-after-the-curves)
+at every step. Across ten random turns of each, the version with colour after
+the curves was better on average. So both help, but **more turns of the usual
+fit give the larger gain**: if you have time, run more turns first, and add
+`--after-curves` when you also want to compare that version.
+
 ## When a LUT is "poor"
 
 Many film-simulation LUTs reshape very saturated colours in ways the camera's
@@ -232,7 +316,8 @@ The tool says which rule applied. Otherwise it writes no firmware; add
   result with the tested build. It prints `selftest: PASSED`.
 - `uv run gr4_lutsmith.py fit my_look.cube --photo R0001234.DNG` fits and
   reports without needing the firmware file, so you can try many LUTs first.
-- `check` also tells you whether a GR4-LUTSmith firmware uses hue sectors.
+- `check` also tells you whether a GR4-LUTSmith firmware uses hue sectors and
+  the colour mix after the curves.
 
 ## Without uv
 
@@ -265,6 +350,7 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | Sliders opening at 0 (grain off) | made of the same changes as the tested build (a subset of them); not installed on its own yet |
 | Looks that need two or three tone curves (colour casts, toned looks) | three curves tested on a GR IV 1.11 |
 | Hue sectors | tested on a GR IV 1.11 in RAW Development with a film-simulation LUT (ISO 200, a daylight scene of greens and yellows): the camera matched the tool's prediction, the difference to the LUT fell by about 30 % on coloured areas, and no gaps between colours were visible. Reds, blues, purples and higher ISO have not been checked on the camera yet |
+| Colour after the curves (`--after-curves`, optional) | 
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files
