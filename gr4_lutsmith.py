@@ -22,6 +22,7 @@ Python 3.8 or newer with numpy. --photo and preview also need rawpy and pillow.
 """
 import argparse
 import base64
+import binascii
 import hashlib
 import json
 import math
@@ -30,7 +31,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '1.6.0'
+VERSION = '1.7.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -922,28 +923,111 @@ def extra_changes(look, name, space):
     return out
 
 
-def check_name(name, slot):
-    """Problems (refusals) and warnings for naming a slot; the name is shown in every camera language."""
+# The camera's menu languages and the characters each one shows. ASCII shows in all of them; other characters show
+# when the camera is set to a language that uses them.
+CAMERA_LANGUAGES = ('Czech', 'Danish', 'Dutch', 'English', 'Finnish', 'French', 'German', 'Greek', 'Hungarian',
+                    'Italian', 'Japanese', 'Korean', 'Polish', 'Portuguese', 'Russian', 'Chinese-S', 'Chinese-T',
+                    'Spanish', 'Swedish', 'Thai', 'Turkish')
+LATIN_LANGUAGES = ('Czech', 'Danish', 'Dutch', 'English', 'Finnish', 'French', 'German', 'Hungarian', 'Italian',
+                   'Polish', 'Portuguese', 'Spanish', 'Swedish', 'Turkish')
+CJK = ('Japanese', 'Chinese-S', 'Chinese-T')
+SCRIPTS = (((0x00a0, 0x024f), LATIN_LANGUAGES, 'accented Latin'), ((0x0370, 0x03ff), ('Greek',), 'Greek'),
+           ((0x0400, 0x04ff), ('Russian',), 'Cyrillic'), ((0x0e00, 0x0e7f), ('Thai',), 'Thai'),
+           ((0x3040, 0x30ff), ('Japanese',), 'Japanese kana'), ((0x31f0, 0x31ff), ('Japanese',), 'Japanese kana'),
+           ((0xff66, 0xff9f), ('Japanese',), 'Japanese kana'), ((0x3400, 0x4dbf), CJK, 'Chinese characters'),
+           ((0x4e00, 0x9fff), CJK, 'Chinese characters'), ((0x1100, 0x11ff), ('Korean',), 'Korean'),
+           ((0x3130, 0x318f), ('Korean',), 'Korean'), ((0xac00, 0xd7a3), ('Korean',), 'Korean'),
+           ((0x3000, 0x303f), CJK + ('Korean',), 'Asian punctuation'),
+           ((0xff00, 0xff65), CJK + ('Korean',), 'full-width characters'))
+LOCALES = {'cs': 'Czech', 'da': 'Danish', 'nl': 'Dutch', 'en': 'English', 'fi': 'Finnish', 'fr': 'French',
+           'de': 'German', 'el': 'Greek', 'hu': 'Hungarian', 'it': 'Italian', 'ja': 'Japanese', 'ko': 'Korean',
+           'pl': 'Polish', 'pt': 'Portuguese', 'ru': 'Russian', 'es': 'Spanish', 'sv': 'Swedish', 'th': 'Thai',
+           'tr': 'Turkish'}
+
+
+def system_language():
+    """The camera language to assume: the computer's language when the camera has it, else English."""
+    import locale
+    import os
+    code = (os.environ.get('LC_ALL') or os.environ.get('LANG') or (locale.getlocale()[0] or '')).replace('-', '_')
+    low = code.lower()
+    if low.startswith('zh'):
+        return 'Chinese-T' if any(t in low for t in ('tw', 'hk', 'mo', 'hant')) else 'Chinese-S'
+    return LOCALES.get(low[:2], 'English')
+
+
+def name_scripts(name):
+    """{script label: camera languages that show it} for every non-ASCII character; refuses characters no camera
+    language shows."""
+    found, bad = {}, []
+    for c in name:
+        if ' ' <= c <= '~':
+            continue
+        hit = next((sc for sc in SCRIPTS if sc[0][0] <= ord(c) <= sc[0][1]), None)
+        if hit is None:
+            bad.append(c)
+        else:
+            found.setdefault(hit[2], set()).update(hit[1])
+    if bad:
+        raise Refused(f'the camera cannot show {"".join(sorted(set(bad)))!r} in any of its languages; use letters '
+                      'and characters of one of the camera\'s languages')
+    return found
+
+
+def check_name(name, slot, camera_language='English'):
+    """(notes, question) for naming a slot. A question means the name may not show with this camera language and
+    needs the user's confirmation; problems are refused."""
     nd = SLOT_DATA['names']
     s = nd['slots'].get(slot)
     if s is None:
         raise Refused(f'{SLOT_NAMES[slot]} cannot be renamed (its name is shared with another look)')
     if not name or name != name.strip():
         raise Refused('the name must not be empty or start/end with a space')
-    bad = sorted(set(name) - set(nd['allowed']))
-    if bad:
-        raise Refused(f'the camera cannot show these characters: {"".join(bad)!r}')
+    found = name_scripts(name)
     most = max(r[5] for r in s['languages'])
     if len(name) > most:
         raise Refused(f'{SLOT_NAMES[slot]} takes names of up to {most} characters ({name!r} has {len(name)})')
-    warnings = []
-    unverified = {c: nd['unverified'][c] for c in sorted(set(name)) if c in nd['unverified']}
-    if unverified:
-        langs = sorted({lang for ls in unverified.values() for lang in ls})
-        warnings.append(f'not yet seen on the camera in {", ".join(langs)}: {"".join(unverified)!r}')
-    if len(name) > nd['display_hint']:
-        warnings.append(f'names over {nd["display_hint"]} characters may be cut off on some screens')
-    return warnings
+    notes, question = [], None
+    width = sum(2 if 0x1100 <= ord(c) and not 0xff61 <= ord(c) <= 0xffdc else 1 for c in name)
+    if width > nd['display_hint']:
+        notes.append(f'long names may be cut off on some screens')
+    if found:
+        both = set(CAMERA_LANGUAGES)
+        for langs in found.values():
+            both &= langs
+        kinds = ', '.join(found)
+        if camera_language not in both:
+            where = ('no single camera language shows all of them' if not both else
+                     'they show when the camera is set to ' + ', '.join(l for l in CAMERA_LANGUAGES if l in both))
+            question = (f'This name uses {kinds}. Your camera language is {camera_language}, so they may not show; '
+                        f'{where}.')
+        else:
+            notes.append(f'uses {kinds}: shown with the camera set to {camera_language}; '
+                         'if you switch to a language that does not use them, they may not show')
+    return notes, question
+
+
+def settle_name(name, slot, camera_language, accepted, log=print):
+    """Show the notes on a name and, when it may not show with this camera language, get the user's answer
+    (accepted beforehand, or asked at the terminal). Returns True when the name was accepted after a question."""
+    notes, question = check_name(name, slot, camera_language)
+    for n in notes:
+        log(f'note on the name: {n}')
+    if not question:
+        return False
+    log(question)
+    if accepted:
+        log('using it anyway, as accepted')
+        return True
+    if sys.stdin.isatty():
+        try:
+            ans = input('Use this name anyway? Type y to continue: ').strip().lower()
+        except EOFError:
+            ans = ''
+        if ans in ('y', 'yes'):
+            return True
+    raise Refused('name not used; choose another name, set --camera-language to the camera\'s language, '
+                  'or add --accept-name to use it anyway')
 
 
 def name_changes(look, slot):
@@ -951,7 +1035,7 @@ def name_changes(look, slot):
     name = look.get('name')
     if not name:
         return []
-    check_name(name, slot)
+    check_name(name, slot)                       # refusals only; the question was answered when the look was made
     nd, label = SLOT_DATA['names'], SLOT_NAMES[slot]
     s = nd['slots'][slot]
     host = next(r for r in s['languages'] if r[0] == s['host'])
@@ -2141,7 +2225,7 @@ def fit_lut(path, space='srgb', curve='auto', photo=None, iters=1500, log=print,
         scores['fit_score'] = fit_score(lk, v, t, weight)
         ok, why = decide(scores)
         return dict(tool=f'GR4-LUTSmith {VERSION}', seed=seed,
-                    lut=dict(file=str(Path(path).resolve()), sha256=lut.sha256,
+                    lut=dict(file=Path(path).name, sha256=lut.sha256,
                              kind=lut.kind, title=lut.title, space=space),
                     matrix_q13=lk['matrix_q13'], curve_mode=lk['curve_mode'], curves=lk['curves'],
                     hue_sectors=lk.get('hue_sectors'), post_matrix_q9=lk.get('post_matrix_q9'),
@@ -2279,6 +2363,9 @@ def run_turns(a, n, state, post, log=print):
             rec['slot'] = a.slot
             if a.name:
                 rec['name'] = a.name
+                rec['camera_language'] = a.camera_language
+                if state.get('name_accepted'):
+                    rec['name_accepted'] = True
             if state.get('icon'):
                 rec['icon'] = state['icon']
             state['kept'], joined, left = keep(state['kept'], rec)
@@ -2311,14 +2398,79 @@ def ask_more_turns(post):
         print('please type a whole number, optionally followed by a or b, or press Enter')
 
 
+def check_look(look):
+    """Refuse a look whose values the camera cannot take (a look.json may come from someone else)."""
+    matrix_hex(look)
+    if look.get('curves'):
+        distinct_curves(look['curves'])
+        struct.pack('<768H', *[x for c in look['curves'] for x in c])
+    hue_changes(look)
+    if look.get('post_matrix_q9'):
+        post_check(look['post_matrix_q9'])
+    slot = look_slot(look)
+    if look.get('name') is not None:
+        if not isinstance(look['name'], str):
+            raise TypeError('the name must be text')
+        check_name(look['name'], slot)
+    if look.get('icon'):
+        rec = look['icon']
+        if len(base64.b64decode(rec['rgba'], validate=True)) != int(rec['w']) * int(rec['h']) * 4:
+            raise ValueError('the icon has the wrong size')
+        icon_changes(look, slot)
+
+
 def load_look(path):
-    look = json.loads(Path(path).read_text())
-    if 'look' in look and 'matrix_q13' not in look:         # look files written by earlier tools
-        look = dict(look['look'], scores=look.get('scores'))
-    for k in ('matrix_q13',):
-        if k not in look:
+    try:
+        look = json.loads(Path(path).read_text(encoding='utf-8'))
+        if isinstance(look, dict) and 'look' in look and 'matrix_q13' not in look:   # files of earlier tools
+            look = dict(look['look'], scores=look.get('scores'))
+        if not isinstance(look, dict) or 'matrix_q13' not in look:
             raise Refused(f'{path}: not a look file')
+        check_look(look)
+    except Refused as exc:
+        raise Refused(str(exc) if str(exc).startswith(str(path)) else f'{path}: {exc}')
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, struct.error, binascii.Error) as exc:
+        raise Refused(f'{path}: not a valid look file ({exc})')
     return look
+
+
+def adapt_look(look, slot=None, name=None, no_name=False, icon=None, no_icon=False):
+    """A look (e.g. one someone shared) with your own slot, name and icon. The colour data stays as it is."""
+    look = dict(look)
+    if (look.get('lut') or {}).get('file'):                  # earlier versions kept the maker's folders
+        look['lut'] = dict(look['lut'], file=Path(look['lut']['file']).name)
+    if slot:
+        look['slot'] = slot
+    slot = look_slot(look)
+    if no_name or name is not None:
+        for k in ('name', 'camera_language', 'name_accepted'):
+            look.pop(k, None)
+    if name:
+        look['name'] = name
+    if no_icon:
+        look.pop('icon', None)
+    elif icon:
+        look['icon'] = icon_record(icon, slot)
+    if look.get('icon') and slot not in SLOT_DATA['icons']['slots']:
+        raise Refused(f'{SLOT_NAMES[slot]} cannot take an own icon (its icon is shared with another look); '
+                      'add --no-icon')
+    return look
+
+
+def find_lut(look, near):
+    """The look's LUT on this computer, if it is there (same file name and contents): next to look.json, in the
+    current folder, or where earlier versions recorded it."""
+    lut = look.get('lut') or {}
+    name = lut.get('file')
+    if not name:
+        return None
+    for cand in (Path(near).parent / Path(name).name, Path(Path(name).name), Path(name)):
+        try:
+            if cand.is_file() and (not lut.get('sha256') or Lut(cand).sha256 == lut['sha256']):
+                return cand
+        except (Refused, OSError, ValueError):
+            pass                                     # a different or unreadable file of that name
+    return None
 
 
 # ------------------------------------------------------------------ preview
@@ -2372,8 +2524,13 @@ def main(argv=None):
         p.add_argument('--no-hue', action='store_true', help='do not use hue sectors (colour changes per hue)')
         p.add_argument('--slot', choices=tuple(SLOT_NAMES), default=DEFAULT_SLOT,
                        help='which Image Control look to replace with yours (default high-contrast)')
-        p.add_argument('--name', help='show the slot under this name, in every camera language (see `slots` for '
-                                     'the longest name each slot takes)')
+        p.add_argument('--camera-language', choices=CAMERA_LANGUAGES, default=system_language(),
+                       help='the language your camera is set to (default: this computer\'s language, else English); '
+                            'used to check that --name shows')
+        p.add_argument('--accept-name', action='store_true', help='use --name even if it may not show with the '
+                                                                  'camera language')
+        p.add_argument('--name', help='show the slot under this name; plain ASCII shows in every camera language '
+                                     '(see `slots` for the longest name each slot takes)')
         p.add_argument('--icon', type=Path, help='a picture for the slot\'s menu icon (needs pillow); the centre of a '
                                                 'non-square picture is used')
         p.add_argument('--turns', type=int, default=1,
@@ -2394,10 +2551,23 @@ def main(argv=None):
     b.add_argument('looks', type=Path, nargs='+', metavar='look.json',
                    help='one look per slot (each look.json says its slot)')
     b.add_argument('input', type=Path, help='official RICOH fwdc248b.bin (GR IV 1.11)')
+    b.add_argument('--slot', choices=tuple(SLOT_NAMES), help='put the look on this slot instead of the one its '
+                                                              'look.json says (one look only)')
+    b.add_argument('--name', help='show the slot under this name instead of the look.json\'s (one look only)')
+    b.add_argument('--no-name', action='store_true', help='keep the slot\'s own name (one look only)')
+    b.add_argument('--icon', type=Path, help='use this picture as the slot\'s icon (one look only; needs pillow)')
+    b.add_argument('--no-icon', action='store_true', help='keep the slot\'s own icon (one look only)')
+    b.add_argument('--camera-language', choices=CAMERA_LANGUAGES,
+                   help='the language your camera is set to (default: the one saved with the look, else this '
+                        'computer\'s)')
+    b.add_argument('--accept-name', action='store_true', help='use the looks\' names even if they may not show '
+                                                              'with the camera language')
     b.add_argument('-o', '--output-dir', type=Path)
     p = sub.add_parser('preview', help='render a DNG with the look (needs rawpy, pillow)')
     p.add_argument('look', type=Path)
     p.add_argument('photo', type=Path)
+    p.add_argument('--lut', type=Path, help='the .cube file, to show it next to the camera (found automatically '
+                                            'when it is next to look.json)')
     p.add_argument('-o', '--output', type=Path)
     sub.add_parser('slots', help='list the Image Control looks yours can replace (--slot)')
     c = sub.add_parser('check', help='identify a fwdc248b.bin and validate its container')
@@ -2425,9 +2595,11 @@ def main(argv=None):
         need_numpy()
         if a.cmd == 'preview':
             look = load_look(a.look)
-            lut = look.get('lut', {})
-            src = lut.get('file') if lut else None
-            out = preview(look, a.photo, a.output or a.look.with_name('preview.jpg'), src, lut.get('space', 'srgb'))
+            src = a.lut or find_lut(look, a.look)
+            if not src:
+                print('LUT not found next to the look; add --lut my_look.cube to compare with it')
+            out = preview(look, a.photo, a.output or a.look.with_name('preview.jpg'), src,
+                          (look.get('lut') or {}).get('space', 'srgb'))
             print(f'wrote {out}')
             return 0
         if a.cmd in ('make', 'fit'):
@@ -2441,13 +2613,11 @@ def main(argv=None):
             if a.turns < 1:
                 raise Refused('--turns must be at least 1')
             print(f'slot: {slot_line(a.slot)}' + (f', shown as "{a.name}"' if a.name else ''))
-            if a.name:
-                for w in check_name(a.name, a.slot):
-                    print(f'note on the name: {w}')
+            name_accepted = settle_name(a.name, a.slot, a.camera_language, a.accept_name) if a.name else False
             icon = icon_record(a.icon, a.slot) if a.icon else None
             if icon:
                 print(f'icon: {a.icon.name} -> {icon["w"]}x{icon["h"]}')
-            state = dict(kept=[], history=[], history_turns=[], icon=icon)
+            state = dict(kept=[], history=[], history_turns=[], icon=icon, name_accepted=name_accepted)
             n, post = a.turns, a.after_curves
             while n:
                 run_turns(a, n, state, post)
@@ -2493,12 +2663,41 @@ def main(argv=None):
             return 0
         if a.cmd == 'build':
             looks = [load_look(x) for x in a.looks]
+            adapt = a.slot or a.name is not None or a.no_name or a.icon or a.no_icon
+            if adapt and len(looks) > 1:
+                raise Refused('--slot, --name and --icon change one look; build each look alone with them first '
+                              '(each gets its own look.json), then build those together')
+            if a.name is not None and a.no_name or a.icon and a.no_icon:
+                raise Refused('choose either --name or --no-name, and either --icon or --no-icon')
+            if adapt:
+                looks = [adapt_look(looks[0], a.slot, a.name, a.no_name, a.icon, a.no_icon)]
             for x, lk in zip(a.looks, looks):
                 print(f'{x}: {slot_line(look_slot(lk))}' + (f', shown as "{lk["name"]}"' if lk.get('name') else '')
                       + (', own icon' if lk.get('icon') else ''))
-                for w in check_name(lk['name'], look_slot(lk)) if lk.get('name') else []:
-                    print(f'  note on the name: {w}')
-            out_dir = a.output_dir or a.looks[0].parent
+                try:
+                    describe(lk)
+                except (KeyError, TypeError, AttributeError):
+                    pass                                     # a look file without its fit results
+                if lk.get('name'):
+                    lang = a.camera_language or lk.get('camera_language') or system_language()
+                    saved = lk.get('name_accepted') and lang == lk.get('camera_language')
+                    yes = settle_name(lk['name'], look_slot(lk), lang, a.accept_name or saved,
+                                      log=lambda x: print('  ' + x))
+                    if adapt:                                # saved with the adapted look
+                        lk['camera_language'] = lang
+                        lk.pop('name_accepted', None)
+                        if yes:
+                            lk['name_accepted'] = True
+            title = (looks[0].get('lut') or {}).get('title') or a.looks[0].stem
+            out_dir = a.output_dir or (Path('output') / title if adapt else a.looks[0].parent)
+            if adapt:
+                if (out_dir / 'look.json').resolve() == a.looks[0].resolve():
+                    raise Refused('that would replace the look.json you started from; choose another folder with -o')
+                out_dir.mkdir(parents=True, exist_ok=True)
+                (out_dir / 'look.json').write_text(json.dumps(looks[0], indent=1) + '\n')
+                if looks[0].get('icon'):
+                    icon_image(looks[0]['icon']).save(out_dir / 'icon.png')
+                print(f'wrote {out_dir / "look.json"} (the look with your slot, name and icon)')
             data = make_firmware(a.input.read_bytes(), looks)
             target = write_atomic(data, out_dir)
             print(f'wrote {target}  (SHA-256 {sha256(data)})')

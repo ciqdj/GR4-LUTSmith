@@ -117,8 +117,8 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
 - `--slot vivid`, `--slot cinema-yellow`, … (optional) puts your look in place
   of another look instead of High Contrast. `uv run gr4_lutsmith.py slots`
   lists them all: see [Choosing the slot](#choosing-the-slot).
-- `--name "My Look"` (optional) shows the slot under your own name, in every
-  camera language: see [Naming the slot](#naming-the-slot).
+- `--name "My Look"` (optional) shows the slot under your own name: see
+  [Naming the slot](#naming-the-slot).
 - `--icon my_icon.png` (optional) gives the slot your own menu icon: see
   [Your own icon](#your-own-icon).
 - `--turns 3` (optional) runs three fits and keeps the best ones: see
@@ -147,7 +147,9 @@ The tool also says at the start which slot your look goes to, for example
 `slot: High Contrast (replaces the hidden monochrome High Contrast look)`.
 
 The output folder `output/my_look/` also contains `look.json` (the fitted
-look) and can take a preview (step 3).
+look) and can take a preview (step 3). You can share `look.json` with other
+GR IV owners: they build the same look without fitting it again (see
+[Using a look someone shared](#using-a-look-someone-shared)).
 
 If the LUT cannot be reproduced well, or the firmware file is not the official
 1.11, the tool prints `refused: …` and writes **no firmware**.
@@ -159,7 +161,10 @@ uv run gr4_lutsmith.py preview output/my_look/look.json R0001234.DNG
 ```
 
 This writes `output/my_look/preview.jpg` with three panels: the camera
-without the look, the LUT itself, and the camera **with** the look. Colour and
+without the look, the LUT itself, and the camera **with** the look. The LUT
+panel needs the `.cube` file: the tool finds it next to `look.json` or in the
+current folder, or give it with `--lut my_look.cube`; without it, the preview
+shows the other two panels. Colour and
 tone are what to compare. Sharpening and noise are not simulated.
 
 ### 4. Copy it to the SD card
@@ -292,7 +297,7 @@ fit give the larger gain**: if you have time, run more turns first, and add
 ## Choosing the slot
 
 Your look replaces one of the camera's looks. You choose which one with
-`--slot` (`make` and `fit`); `uv run gr4_lutsmith.py slots` shows the same list
+`--slot` (`make` and `build`); `uv run gr4_lutsmith.py slots` shows the same list
 in the terminal:
 
 | `--slot` | Shown as | Replaces | Still | Movie | Extra sliders |
@@ -327,13 +332,14 @@ in the terminal:
 - **Not available:** Standard, Monotone, HDR Tone, Cross Processing and the
   hidden Grainy and HDR looks. These share parts of their processing with other
   looks or use special processing that would change your colours.
-- **Several looks in one firmware:** make one look per slot with `fit`, then
-  build them together:
+- **Several looks in one firmware:** fit each LUT with `fit`, then build them
+  together, each look file followed by its own `--slot` (and `--name`,
+  `--icon` if you like):
 
   ```sh
-  uv run gr4_lutsmith.py fit look_a.cube --slot cinema-yellow --photo R0001234.DNG -o output/a
-  uv run gr4_lutsmith.py fit look_b.cube --slot vivid         --photo R0001234.DNG -o output/b
-  uv run gr4_lutsmith.py build output/a/look.json output/b/look.json ~/Downloads/fwdc248b.bin -o output/both
+  uv run gr4_lutsmith.py fit look_a.cube --photo R0001234.DNG -o output/a
+  uv run gr4_lutsmith.py fit look_b.cube --photo R0001234.DNG -o output/b
+  uv run gr4_lutsmith.py build output/a/look.json --slot cinema-yellow output/b/look.json --slot vivid --name "Look B" ~/Downloads/fwdc248b.bin -o output/both
   ```
 
 - **How many at once:** High Contrast and the two Cinema slots always take a
@@ -347,7 +353,7 @@ in the terminal:
 
 ## Naming the slot
 
-`--name` (`make` and `fit`) gives the slot your own name, in the Image Control
+`--name` (`make` and `build`) gives the slot your own name, in the Image Control
 menu and its screens, in all of the camera's languages:
 
 ```sh
@@ -358,17 +364,29 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --slot vivid -
   shows it (from 9 characters on Retro to 23 on Cinema (Yellow)). The second
   monochrome Standard cannot be renamed, because it shares its name with the
   colour Standard look.
-- Use letters, digits, spaces and simple punctuation (`( ) + - . / : % ?`).
-  Letters with accents and other symbols are refused. A few letters
-  (`Q V Y Z j q w y`, and `I` in Chinese) appear in no menu of some languages
-  yet; the tool tells you which, and they may not show there.
-- Names over 16 characters may be cut off on some screens.
-- Without `--name`, the slot keeps its own name. The name is saved in
-  `look.json`, so `build` uses it too, and `check` shows it.
+- **Plain ASCII** (English letters, digits, spaces and punctuation) shows in
+  every camera language. This is the safe choice.
+- **Other letters and characters** work in the camera languages that use them:
+  a Japanese name shows when the camera is set to Japanese, `Müller` in the
+  European languages, `Плёнка` in Russian, and so on. Characters that none of
+  the camera's languages use (emoji, Arabic, Hebrew, …) are refused.
+- The tool checks the name against your **camera language**, which is your
+  computer's language unless you set `--camera-language` (for example
+  `--camera-language Japanese`; `--help` lists all 21). If the name uses
+  characters that language does not, the tool warns that they may not show and
+  asks whether to use the name anyway. Answer `y` to go ahead, or add
+  `--accept-name` to agree in advance (needed when the tool cannot ask, for
+  example in a script). If you later switch the camera to another language, a
+  name outside ASCII may not show there.
+- Long names may be cut off on some screens (Chinese, Japanese and Korean
+  characters take about twice the width of English letters).
+- Without `--name`, the slot keeps its own name. The name is not saved in
+  `look.json` (that file holds only the look): give `--name` again when you
+  `build`. `check` shows the name in a built firmware.
 
 ## Your own icon
 
-`--icon` (`make` and `fit`) replaces the slot's icon in the Image Control menu
+`--icon` (`make` and `build`) replaces the slot's icon in the Image Control menu
 with your own picture:
 
 ```sh
@@ -379,13 +397,49 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --slot vivid -
   or smaller picture is resized, and if it is not square, its **centre** is
   used. Transparent parts stay transparent, so a PNG with a transparent
   background looks like the camera's own icons.
-- The tool saves the result as `icon.png` next to `look.json`, so you can see
+- `make` saves the result as `icon.png` next to the firmware, so you can see
   exactly what the camera will show. Simple, bold shapes read best at this size.
 - Every slot except the second monochrome Standard takes an own icon (that one
   shares its icon with the colour Standard look). `slots` lists them.
 - It needs Pillow (`uv sync --extra photo`). Without `--icon`, the slot keeps
-  its own icon. The icon is saved in `look.json`, so `build` uses it too, and
-  `check` shows which slots have their own icon.
+  its own icon. The icon is not saved in `look.json`: give `--icon` again when
+  you `build`. `check` shows which slots have their own icon.
+
+## Using a look someone shared
+
+`look.json` holds only the look itself: its colour settings and how well they
+fit the LUT. Nothing about the slot, the name or the icon, and no folders of
+your computer (only the LUT's file name). Whoever has the file can build the
+firmware directly, without the LUT and without fitting, and gets the same
+firmware, byte for byte, as its maker for the same slot, name and icon.
+
+The file can have any name, so rename it as you like before you share it
+(`portra-400.json`, …):
+
+```sh
+uv run gr4_lutsmith.py build portra-400.json ~/Downloads/fwdc248b.bin --slot vivid --name "Portra" --icon portra.png
+```
+
+- The tool first shows how well the look fits its LUT (the results its maker
+  saw; "on your photo" means the maker's photo).
+- Slot, name and icon are yours to choose, as in
+  [Choosing the slot](#choosing-the-slot), [Naming the slot](#naming-the-slot)
+  and [Your own icon](#your-own-icon). Without `--slot`, the look goes on
+  High Contrast.
+- Several looks: write each file's own `--slot`, `--name` and `--icon` right
+  after it:
+
+  ```sh
+  uv run gr4_lutsmith.py build portra-400.json --slot vivid --name "Portra" tri-x.json --slot hard-monotone ~/Downloads/fwdc248b.bin -o output/both
+  ```
+
+- The file's contents are checked before anything is built: a damaged file,
+  or one with values the camera cannot take, is refused and nothing is
+  written.
+- Files made by versions before 1.7.0 may also hold a slot, a name, an icon
+  and the full path to the LUT. `build` ignores the slot, name and icon (it
+  says which they were); open such a file in a text editor and check
+  `"file"` before you share it.
 
 ## When a LUT is "poor"
 
@@ -471,6 +525,7 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | Looks on the other slots (Vivid, Positive Film, Negative Film, Bleach Bypass, Retro, the monochrome slots) | tested on a GR IV 1.11: works |
 | Your own name for the slot (`--name`) | tested on a GR IV 1.11: works |
 | Your own icon for the slot (`--icon`) | tested on a GR IV 1.11: works |
+| Building from a shared `look.json` | checked offline: the firmware is byte-identical to `make` with the same LUT result, slot, name and icon; nothing new reaches the camera |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files
