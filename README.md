@@ -68,7 +68,8 @@ After installing, the Image Control list ends like this:
   the first "HDR Tone"). You can choose **Cinema (Yellow)** or **Cinema (Green)**
   instead, or use several of them: see [Choosing the slot](#choosing-the-slot).
   With `--name` the slot shows your own name instead: see
-  [Naming the slot](#naming-the-slot).
+  [Naming the slot](#naming-the-slot); with `--icon`, your own icon: see
+  [Your own icon](#your-own-icon).
 - It opens with **every slider at 0**, sharpness at its standard value and
   **grain off**. Your LUT's look is built in at those settings; the sliders then
   work as usual, starting from your look.
@@ -118,6 +119,8 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
   lists them all: see [Choosing the slot](#choosing-the-slot).
 - `--name "My Look"` (optional) shows the slot under your own name, in every
   camera language: see [Naming the slot](#naming-the-slot).
+- `--icon my_icon.png` (optional) gives the slot your own menu icon: see
+  [Your own icon](#your-own-icon).
 - `--turns 3` (optional) runs three fits and keeps the best ones: see
   [More turns](#more-turns).
 - `--after-curves` is optional: see [Colour after the curves](#colour-after-the-curves).
@@ -363,6 +366,27 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --slot vivid -
 - Without `--name`, the slot keeps its own name. The name is saved in
   `look.json`, so `build` uses it too, and `check` shows it.
 
+## Your own icon
+
+`--icon` (`make` and `fit`) replaces the slot's icon in the Image Control menu
+with your own picture:
+
+```sh
+uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --slot vivid --name "Portra" --icon portra.png
+```
+
+- Any picture works (PNG, JPEG, …). The menu icon is 40×40 pixels: a larger
+  or smaller picture is resized, and if it is not square, its **centre** is
+  used. Transparent parts stay transparent, so a PNG with a transparent
+  background looks like the camera's own icons.
+- The tool saves the result as `icon.png` next to `look.json`, so you can see
+  exactly what the camera will show. Simple, bold shapes read best at this size.
+- Every slot except the second monochrome Standard takes an own icon (that one
+  shares its icon with the colour Standard look). `slots` lists them.
+- It needs Pillow (`uv sync --extra photo`). Without `--icon`, the slot keeps
+  its own icon. The icon is saved in `look.json`, so `build` uses it too, and
+  `check` shows which slots have their own icon.
+
 ## When a LUT is "poor"
 
 Many film-simulation LUTs reshape very saturated colours in ways the camera's
@@ -446,6 +470,7 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | Looks on the Cinema (Yellow) / Cinema (Green) slots | tested on a GR IV 1.11: works |
 | Looks on the other slots (Vivid, Positive Film, Negative Film, Bleach Bypass, Retro, the monochrome slots) | tested on a GR IV 1.11: works |
 | Your own name for the slot (`--name`) | tested on a GR IV 1.11: works |
+| Your own icon for the slot (`--icon`) | tested on a GR IV 1.11: works |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files

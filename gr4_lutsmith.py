@@ -30,7 +30,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '1.5.0'
+VERSION = '1.6.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -264,8 +264,8 @@ beiFUHHje8SVci+fS1peSz+mFxiZZ4urloQ8gl5fKKiDUAq2vGdqA1MKzjmKrCnK8XhTnI8DmmJC8tBc
 '''
 POST = json.loads(zlib.decompress(base64.b64decode(''.join(_POST.split()))))
 
-# Other slots for a personal look: the changes for each slot, the room for the looks' data, and each slot's name
-# in every language, all with their original bytes, which are checked.
+# Other slots for a personal look: the changes for each slot, the room for the looks' data, each slot's name in
+# every language and its menu icon, all checked against the original (icons by a fingerprint of their pixels).
 _SLOTS = '''
 eNrsvWuvZTmSHfZXjAQs2HC1zfdjvhi2Xpbkh6QZy5ZGjQHJzd2VmurKVlVW97QE/XdHBBnkYZz7yOouQQaUtXHq3rw8m5ubj+AiuVbE
 f/zw43efPv/44S/+44f28fv+2/KrP/bvvvv0B/zDD/hDp28+XP0uP32H3/rrv/ZeWefcNx/CrXQL3X/AX+P49dffjPQYvvkQ20qP7UwP
@@ -593,45 +593,55 @@ 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
-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
+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
 '''
 SLOT_DATA = json.loads(zlib.decompress(base64.b64decode(''.join(_SLOTS.split()))))
 SLOT_NAMES = {'high-contrast': 'High Contrast', 'cinema-yellow': 'Cinema (Yellow)', 'cinema-green': 'Cinema (Green)',
@@ -665,13 +675,14 @@ def slot_line(name):
 
 
 def list_slots(log=print):
-    log(f'{"--slot":16s} {"shown as":24s} {"replaces":42s} {"movie":5s}  {"--name up to":12s}  extra sliders')
+    log(f'{"--slot":16s} {"shown as":24s} {"replaces":42s} {"movie":5s}  {"--name up to":13s} {"--icon":7s} extra sliders')
     for name in SLOT_ORDER:
         what, movie, extra = SLOT_INFO[name]
         shown = SLOT_NAMES[name] + (' (default)' if name == DEFAULT_SLOT else '')
         ns = SLOT_DATA['names']['slots'].get(name)
         most = f'{max(r[5] for r in ns["languages"])} characters' if ns else '- (fixed)'
-        log(f'{name:16s} {shown:24s} {what:42s} {"yes" if movie else "no":5s}  {most:13s} {extra}')
+        own_icon = 'yes' if name in SLOT_DATA['icons']['slots'] else 'no'
+        log(f'{name:16s} {shown:24s} {what:42s} {"yes" if movie else "no":5s}  {most:13s} {own_icon:7s} {extra}')
     log('Your look opens with every slider at 0 in every slot; a slot you do not use keeps its own look.')
 DEFAULT_SLOT = 'high-contrast'
 
@@ -955,6 +966,57 @@ def name_changes(look, slot):
     return out
 
 
+ICON_WHAT = 'own icon'
+
+
+def make_icon(src, size):
+    """Any picture -> an RGBA icon of exactly `size` (w, h): the centre of a non-square picture, resized with clean
+    transparent edges. Needs Pillow."""
+    try:
+        from PIL import Image
+    except ImportError:
+        raise Refused('--icon needs pillow: uv sync --extra photo (or python3 -m pip install pillow)')
+    try:
+        img = Image.open(src).convert('RGBA')
+    except (OSError, ValueError) as exc:
+        raise Refused(f'cannot read the icon picture {src}: {exc}')
+    w, h = size
+    scale = max(w / img.width, h / img.height)        # cover the icon, then keep its centre
+    nw, nh = max(w, round(img.width * scale)), max(h, round(img.height * scale))
+    big = img.convert('RGBa').resize((nw, nh), Image.LANCZOS)   # premultiplied: no dark fringes
+    left, top = (nw - w) // 2, (nh - h) // 2
+    return big.crop((left, top, left + w, top + h)).convert('RGBA')
+
+
+def icon_record(src, slot):
+    """The look's icon for this slot, as stored in look.json."""
+    place = SLOT_DATA['icons']['slots'].get(slot)
+    if place is None:
+        raise Refused(f'{SLOT_NAMES[slot]} cannot take an own icon (its icon is shared with another look)')
+    icon = make_icon(src, (place[1], place[2]))
+    return dict(w=place[1], h=place[2], source=Path(src).name, rgba=base64.b64encode(icon.tobytes()).decode())
+
+
+def icon_image(record):
+    from PIL import Image
+    return Image.frombytes('RGBA', (record['w'], record['h']), base64.b64decode(record['rgba']))
+
+
+def icon_changes(look, slot):
+    """(offset, fingerprint of the original, new, what) repainting the slot's menu icon."""
+    rec = look.get('icon')
+    if not rec:
+        return []
+    place = SLOT_DATA['icons']['slots'].get(slot)
+    if place is None:
+        raise Refused(f'{SLOT_NAMES[slot]} cannot take an own icon (its icon is shared with another look)')
+    off, w, h, digest = place
+    data = base64.b64decode(rec['rgba'])
+    if (rec['w'], rec['h']) != (w, h) or len(data) != w * h * 4:
+        raise Refused(f'the icon must be {w}x{h} for {SLOT_NAMES[slot]}; make the look again with --icon')
+    return [(off, dict(sha256=digest, bytes=w * h * 4), data.hex(), f'{SLOT_NAMES[slot]}: {ICON_WHAT}')]
+
+
 def look_slot(look):
     name = look.get('slot') or DEFAULT_SLOT
     if name not in SLOT_NAMES:
@@ -992,7 +1054,7 @@ def all_changes(looks):
     out += space.changes()
     for name in SLOT_ORDER:
         if name in by_name:
-            out += name_changes(by_name[name], name)
+            out += name_changes(by_name[name], name) + icon_changes(by_name[name], name)
     unlock = set(SLOT_DATA['unlock'])                # without a High Contrast look, that slot stays as it was
     fixed = [(o, a, b, DATA_WHAT) for o, a, b in DATA['fixed']
              if (o in unlock or DEFAULT_SLOT in names) and o not in taken]
@@ -1015,7 +1077,15 @@ def make_firmware(source, looks, log=print):
     if rtos is None:
         raise Refused('payload: RTOS section not found')
     buf = bytearray(payload)
-    items = all_changes(looks)
+    items = []
+    for off, old, new, what in all_changes(looks):
+        if isinstance(old, dict):                    # checked by fingerprint: take the original bytes from the file
+            have = bytes(buf[off:off + old['bytes']])
+            if hashlib.sha256(have).hexdigest() != old['sha256']:
+                raise Refused(f'unexpected original bytes at {off:#x} ({what})')
+            old = have.hex()
+        items.append((off, old, new, what))
+    icon_sec = next((s for s in secs if s[0] == SLOT_DATA['icons']['section']), None)
     spans = sorted((o, o + len(bytes.fromhex(a))) for o, a, _, _ in items)
     if any(b0 < a1 for (_, a1), (b0, _) in zip(spans, spans[1:])):
         raise Refused('internal: overlapping changes')
@@ -1024,7 +1094,8 @@ def make_firmware(source, looks, log=print):
         have = bytes(buf[off:off + len(old)])
         if have != old or len(new) != len(old):
             raise Refused(f'unexpected original bytes at {off:#x} ({what})')
-        if not (rtos[1] <= off and off + len(new) <= rtos[2]):
+        icon = what.endswith(ICON_WHAT) and icon_sec and icon_sec[1] <= off and off + len(new) <= icon_sec[2]
+        if not (rtos[1] <= off and off + len(new) <= rtos[2]) and not icon:
             raise Refused(f'change at {off:#x} is outside the RTOS section')
         buf[off:off + len(new)] = new
     log(f'  {len(items)} changes applied ({sum(w != DATA_WHAT for *_, w in items)} carry your look)')
@@ -1046,11 +1117,12 @@ def make_firmware(source, looks, log=print):
         raise Refused(f'verification: unexpected changes at {[hex(i) for i in stray[:8]]}')
     if sections(again) != secs:
         raise Refused('verification: section layout changed')
+    open_tags = {'RTOS'} | ({icon_sec[0]} if icon_sec and any(w.endswith(ICON_WHAT) for *_, w in items) else set())
     for tag, a, b in secs:
-        if tag != 'RTOS' and again[a:b] != payload[a:b]:
+        if tag not in open_tags and again[a:b] != payload[a:b]:
             raise Refused(f'verification: section {tag} changed')
     log(f'verified: {len(changed)} payload bytes changed, {reemitted} frames re-encoded, '
-        f'all other sections identical')
+        f'all other sections identical' + (' (icons changed in the icon section only)' if len(open_tags) > 1 else ''))
     return out
 
 
@@ -1130,7 +1202,15 @@ def identify(data, log=print):
         off = rows[at][3]
         return payload[off:off + 2 * (length - SLOT_DATA['names']['length_base'])].decode('utf-16-le', 'replace')
     renamed = {n: shown_name(n) for n in SLOT_NAMES}
-    found = [f + (f' named "{renamed[n]}"' if renamed[n] else '') for n, f in zip(found_slots, found)]
+
+    def own_icon(slot):
+        place = SLOT_DATA['icons']['slots'].get(slot)
+        if not place:
+            return False
+        off, w, h, digest = place
+        return hashlib.sha256(payload[off:off + w * h * 4]).hexdigest() != digest
+    found = [f + (f' named "{renamed[n]}"' if renamed[n] else '') + (' with its own icon' if own_icon(n) else '')
+             for n, f in zip(found_slots, found)]
     log('file     a GR4-LUTSmith firmware; ' + ('personal looks in: ' + '; '.join(found) if found else
                                                  'no personal look (hidden looks unlocked only)'))
     return 0
@@ -2126,7 +2206,9 @@ def describe(look, log=print):
             f'greys {gr["de00_mean"]} (largest cast {gr["cast_max"]})')
     hs = look.get('hue_sectors')
     log(f'  for: {SLOT_NAMES.get(look.get("slot") or DEFAULT_SLOT, "?")}'
-        + (f' (shown as "{look["name"]}")' if look.get('name') else '') + f'; curves: {look["curve_mode"]}; '
+        + (f' (shown as "{look["name"]}")' if look.get('name') else '')
+        + (f', own icon from {look["icon"].get("source", "a picture")}' if look.get('icon') else '')
+        + f'; curves: {look["curve_mode"]}; '
         f'hue sectors: {"yes" if hs else "no"}; '
         f'colour after the curves: {"yes" if look.get("post_matrix_q9") else "no"}; decision: {look["decision"]["reason"]}')
 
@@ -2197,6 +2279,8 @@ def run_turns(a, n, state, post, log=print):
             rec['slot'] = a.slot
             if a.name:
                 rec['name'] = a.name
+            if state.get('icon'):
+                rec['icon'] = state['icon']
             state['kept'], joined, left = keep(state['kept'], rec)
             state['history'].append(dict(result=result_name(rec), seed=seed, kept_when_found=joined,
                                          fit_score=rec['scores']['fit_score'], **measures(rec)))
@@ -2290,6 +2374,8 @@ def main(argv=None):
                        help='which Image Control look to replace with yours (default high-contrast)')
         p.add_argument('--name', help='show the slot under this name, in every camera language (see `slots` for '
                                      'the longest name each slot takes)')
+        p.add_argument('--icon', type=Path, help='a picture for the slot\'s menu icon (needs pillow); the centre of a '
+                                                'non-square picture is used')
         p.add_argument('--turns', type=int, default=1,
                        help='how many fits to run; each extra turn starts from a new random point (default 1)')
         p.add_argument('--seed', type=int, help='run turns from this seed (repeats a turn shown earlier)')
@@ -2358,7 +2444,10 @@ def main(argv=None):
             if a.name:
                 for w in check_name(a.name, a.slot):
                     print(f'note on the name: {w}')
-            state = dict(kept=[], history=[], history_turns=[])
+            icon = icon_record(a.icon, a.slot) if a.icon else None
+            if icon:
+                print(f'icon: {a.icon.name} -> {icon["w"]}x{icon["h"]}')
+            state = dict(kept=[], history=[], history_turns=[], icon=icon)
             n, post = a.turns, a.after_curves
             while n:
                 run_turns(a, n, state, post)
@@ -2373,6 +2462,8 @@ def main(argv=None):
             for r, d in places:
                 d.mkdir(parents=True, exist_ok=True)
                 (d / 'look.json').write_text(json.dumps(r, indent=1) + '\n')
+                if r.get('icon'):
+                    icon_image(r['icon']).save(d / 'icon.png')
             if len(state['history']) > 1:
                 (out_dir / 'turns.json').write_text(json.dumps(dict(
                     turns=[dict(turn=i + 1, **t) for i, t in enumerate(state['history_turns'])],
@@ -2403,7 +2494,8 @@ def main(argv=None):
         if a.cmd == 'build':
             looks = [load_look(x) for x in a.looks]
             for x, lk in zip(a.looks, looks):
-                print(f'{x}: {slot_line(look_slot(lk))}' + (f', shown as "{lk["name"]}"' if lk.get('name') else ''))
+                print(f'{x}: {slot_line(look_slot(lk))}' + (f', shown as "{lk["name"]}"' if lk.get('name') else '')
+                      + (', own icon' if lk.get('icon') else ''))
                 for w in check_name(lk['name'], look_slot(lk)) if lk.get('name') else []:
                     print(f'  note on the name: {w}')
             out_dir = a.output_dir or a.looks[0].parent
