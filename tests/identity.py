@@ -1,7 +1,7 @@
 """The app and the command line must build the same firmware, byte for byte, from the same LUT and choices.
 Usage: GR4_FIRMWARE=… GR4_LUT=… GR4_DNG=… identity.py <folder>  (full-length fit; takes a few minutes)."""
 import os, subprocess, sys, time
-exec(open(os.path.join(os.path.dirname(__file__), 'drive_app.py')).read())
+exec(open(os.path.join(os.path.dirname(__file__), 'drive_app.py'), encoding='utf-8').read())
 FW = os.environ.get('GR4_FIRMWARE')            # the official fwdc248b.bin
 LUT = os.environ.get('GR4_LUT')                 # a .cube LUT
 DNG = os.environ.get('GR4_DNG')                 # a DNG from a GR IV
@@ -27,7 +27,7 @@ look = w.current_look()['look']
 w.build([look]); wait(lambda: w.S.built is not None)
 app_sha = w.S.built[1]
 print('app :', app_sha, '| result', w.S.selected)
-cli = lambda *a: subprocess.run(['uv', 'run', 'gr4_lutsmith.py', *a], cwd=ROOT, capture_output=True, text=True)
+cli = lambda *a: subprocess.run(['uv', 'run', 'gr4_lutsmith.py', *a], cwd=ROOT, capture_output=True, encoding='utf-8', errors='replace')
 r = cli('fit', LUT, '--photo', DNG, '--after-curves', '--slot', 'vivid', '--name', 'Portra', '--camera-language', 'English', '-o', str(OUT / 'cli'))
 rec = 'turns/' + w.S.selected if (OUT / 'cli' / 'turns').exists() else ''
 look_json = OUT / 'cli' / (rec + '/look.json' if rec else 'look.json')

@@ -18,6 +18,8 @@ jobs:
           - { os: macos-14, arch: x86_64 }     # Intel build, made under Rosetta (the same route as local builds)
           - { os: windows-2022, arch: '' }
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '1'          # UTF-8 everywhere (Windows consoles default to a legacy code page)
     permissions:
       contents: read
       id-token: write          # signs the build provenance (Sigstore)

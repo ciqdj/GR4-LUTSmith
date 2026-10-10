@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+for _stream in (sys.stdout, sys.stderr):          # the checks print names in many scripts (Windows consoles are not UTF-8)
+    _stream.reconfigure(encoding='utf-8', errors='replace')
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from PySide6.QtWidgets import QApplication  # noqa: E402
@@ -40,8 +42,8 @@ for prefs, want in [(['en-US', 'zh-Hans-AU'], 'English'), (['ja-JP', 'en-US'], '
 check('tests use their own settings', 'gr4-lutsmith-tests' in QSettings().fileName().lower(), QSettings().fileName())
 
 # translations: every text in every language, placeholders intact
-r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'i18n_check.py')], capture_output=True, text=True,
-                   env=dict(os.environ, QT_QPA_PLATFORM='offscreen'))
+r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'i18n_check.py')], capture_output=True, encoding='utf-8',
+                   errors='replace', env=dict(os.environ, QT_QPA_PLATFORM='offscreen', PYTHONIOENCODING='utf-8'))
 check('translations complete in all 21 languages', r.returncode == 0, r.stdout[-600:])
 
 # the app's name check and the command line's agree
@@ -58,7 +60,7 @@ for name, slot, lang in [('Portra', 'vivid', 'English'), ('ハッセル', 'vivid
           bool(problem) == cli_problem and bool(question) == bool(cli_q) and len(notes) == len(cli_notes))
 
 # shared looks: damaged files are refused, a good one passes
-good = json.loads((ROOT / 'examples' / 'film-1d.look.json').read_text())
+good = json.loads((ROOT / 'examples' / 'film-1d.look.json').read_text(encoding='utf-8'))
 with tempfile.TemporaryDirectory() as d:
     def case(label, data, ok):
         p = Path(d) / f'{label}.json'
@@ -91,7 +93,7 @@ for lang in i18n.LANGS:
         w.show_check(); app.processEvents()
 check('every page draws in 21 languages, day and night', not errors, str(errors[:1]))
 check('no test or preview controls in the app', not any(
-    s in (ROOT / 'lutsmith_app' / f).read_text() for f in ('main.py', 'widgets.py', 'logic.py')
+    s in (ROOT / 'lutsmith_app' / f).read_text(encoding='utf-8') for f in ('main.py', 'widgets.py', 'logic.py')
     for s in ('Reopen confirmation', 'Use a sample', 'Try a damaged file', 'in this preview')))
 
 fw = os.environ.get('GR4_FIRMWARE')

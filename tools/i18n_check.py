@@ -68,6 +68,7 @@ def problems(keys, lang, table):
 
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # texts in every script, on any console
     from PySide6.QtWidgets import QApplication
     QApplication(sys.argv[:1])
     keys = app_keys()

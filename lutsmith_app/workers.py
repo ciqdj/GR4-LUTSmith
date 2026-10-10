@@ -1,4 +1,5 @@
 """Long work (checking the firmware, fitting, the photo preview, building) runs off the window's thread."""
+import sys
 import traceback
 
 from PySide6.QtCore import QThread, Signal
@@ -32,5 +33,6 @@ class Task(QThread):
         except MemoryError:
             self.failed.emit(t('The computer ran out of memory. Close other programs and try again.'))
         except Exception as exc:                               # never lose the window over an unexpected error
-            traceback.print_exc()
+            if sys.stderr is not None:                       # the packaged Windows app has no console
+                traceback.print_exc()
             self.failed.emit(t('Something went wrong: {error}', error=f'{type(exc).__name__}: {exc}'))
