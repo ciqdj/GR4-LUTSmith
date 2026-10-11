@@ -114,7 +114,7 @@ macOS 12（Monterey）以降が必要です。どのMacかわからない場合�
 どのzipも、GitHub上のこのリポジトリ自身のビルドで作られ、そのビルドが出どころの記録（リポジトリ、ビルド、コードの正確なバージョン）に署名します。[GitHub CLI](https://cli.github.com)（`gh auth login`でサインイン済み）を使うと、ダウンロードしたファイルがそのファイルそのもので、変更や差し替えがされていないことを確認できます。
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 （ダウンロードしたzipの名前を使ってください。Windowsでは、ダウンロードフォルダでPowerShellから実行します。）最後に「Verification succeeded!」と表示され、そのファイルを作ったビルドが示されます。それ以外の結果の場合は、開かずに、リリースページからもう一度ダウンロードしてください。リポジトリの**Attestations**ページに、署名されたファイルがすべて表示されます。

@@ -127,7 +127,7 @@ GR IV 不能直接运行 LUT。它的风格由几项原生控制构成：色彩�
 每个 zip 都由本仓库自己在 GitHub 上的构建生成，构建会签署一份来源记录：仓库、构建以及代码的确切版本。你可以用 [GitHub CLI](https://cli.github.com)（已通过 `gh auth login` 登录）确认你下载的正是该文件，且未被修改或替换：
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 （请换成你下载的 zip 的文件名；在 Windows 上，请在 PowerShell 中从“下载”文件夹运行。）最后会显示“Verification succeeded!”，并给出生成该文件的构建。出现任何其他结果都意味着：不要打开它，请从发布页面重新下载。仓库的 **Attestations** 页面列出了每个已签署的文件。

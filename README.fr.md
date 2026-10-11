@@ -176,7 +176,7 @@ dépôt, le build et la version exacte du code. Avec la [GitHub CLI](https://cli
 ni remplacé :
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (utilisez le nom du zip que vous avez téléchargé ; sous Windows, lancez la commande dans PowerShell depuis votre

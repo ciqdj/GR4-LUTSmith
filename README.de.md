@@ -177,7 +177,7 @@ ihrer Herkunft: das Repository, den Build und die genaue Version des Codes. Mit 
 diese Datei ist und nicht verändert oder ausgetauscht wurde:
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (Verwenden Sie den Namen der Zip-Datei, die Sie heruntergeladen haben; unter Windows führen Sie den Befehl in

@@ -167,7 +167,7 @@ repository, the build and the exact version of the code. You can check that your
 not changed or replaced, with the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`):
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (use the name of the zip you downloaded; on Windows, run it in PowerShell from your Downloads folder). It ends with

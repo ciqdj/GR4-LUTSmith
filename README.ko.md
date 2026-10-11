@@ -161,7 +161,7 @@ Intel입니다.
 파일이 바로 그 파일이며 변경되거나 바꿔치기되지 않았는지 확인할 수 있습니다.
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (다운로드한 zip의 이름을 사용하세요. Windows에서는 다운로드 폴더에서 PowerShell로

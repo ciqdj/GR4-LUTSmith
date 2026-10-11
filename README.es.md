@@ -173,7 +173,7 @@ archivo y que no se ha modificado ni sustituido, con la [GitHub CLI](https://cli
 iniciada mediante `gh auth login`):
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (usa el nombre del zip que descargaste; en Windows, ejecútalo en PowerShell desde tu carpeta Descargas). Termina
