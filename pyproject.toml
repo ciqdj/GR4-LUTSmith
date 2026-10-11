@@ -1,6 +1,6 @@
 [project]
 name = "gr4-lutsmith"
-version = "2.0.1"
+version = "2.0.2"
 description = "Put the look of a .cube LUT into a RICOH GR IV (firmware 1.11)"
 readme = "README.md"
 requires-python = ">=3.9"

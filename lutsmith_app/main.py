@@ -1136,9 +1136,11 @@ def main():
     app.setApplicationName('GR4-LUTSmith')
     app.setOrganizationName('GR4-LUTSmith')
     app.setApplicationVersion(gl.VERSION)
-    icon = i18n.ASSETS / 'app' / 'icon.png'
-    if icon.exists():
-        app.setWindowIcon(QIcon(str(icon)))
+    icon = QIcon()                                   # every size drawn on its own (16 to 256 px)
+    for f in sorted((i18n.ASSETS / 'app').glob('icon-*.png'), key=lambda f: int(f.stem.split('-')[1])):
+        icon.addFile(str(f))
+    if not icon.isNull():
+        app.setWindowIcon(icon)
     theme.load_fonts()
     f = QFont(theme.BODY); f.setPixelSize(15)
     app.setFont(f)
