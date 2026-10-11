@@ -5,7 +5,7 @@
 <h1 align="center">GR4-LUTSmith</h1>
 
 <p align="center">
-  <strong>用 <code>.cube</code> LUT 打造您自己的色彩風格，放進您的 RICOH GR IV。</strong>
+  <strong>用 <code>.cube</code> LUT 打造您自己的色彩風格，放進您的 RICOH GR IV 或 GR IV HDF。</strong>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
   <a href="README.es.md">Español</a>
 </p>
 
-GR4-LUTSmith 讀取調色用的 LUT（`.cube`），產生一個 GR IV 韌體，將 LUT 的效果做成**影像控制**中的一個風格。拍照、錄影和取景畫面都能使用它，**RAW Development** 中也能使用。相機的其他一切都維持原樣，而且隨時都能還原為官方韌體。
+GR4-LUTSmith 讀取調色用的 LUT（`.cube`），產生一個 GR IV / GR IV HDF 韌體，將 LUT 的效果做成**影像控制**中的一個風格。拍照、錄影和取景畫面都能使用它，**RAW Development** 中也能使用。相機的其他一切都維持原樣，而且隨時都能還原為官方韌體。
 
 本儲存庫不含任何 RICOH 韌體。官方韌體由您自行從 RICOH 下載，再由隨附的工具在您自己的電腦上，將它轉換成含有您風格的版本。
 
@@ -77,15 +77,15 @@ GR IV 無法直接使用 LUT。它的風格由幾項原生控制組成：色彩�
 
 ## 開始之前
 
-- **相機：** RICOH GR IV（標準彩色機型）。不支援其他機型。
+- **相機：** RICOH GR IV 或 GR IV HDF。RICOH 的 1.11 更新是兩者共用的同一個檔案，本工具產生的檔案也是如此。不支援其他機型，包括 GR IV Monochrome。
 - **您的相機必須已更新至韌體 1.11。** 請在相機的設定選單中確認版本。
   - 較舊版本：先以一般方式，用 RICOH 的官方檔案更新至 1.11。
   - 較新版本：**請勿使用本工具。** 本工具只支援 1.11。
-- **官方韌體檔案。** 從 RICOH IMAGING 官方 GR IV 支援頁面下載**韌體版本 1.11**。如有需要請解壓縮，直到取得 **`fwdc248b.bin`** 檔案。
+- **官方韌體檔案。** 從 RICOH IMAGING 官方 GR IV（或 GR IV HDF）支援頁面下載**韌體版本 1.11**。如有需要請解壓縮，直到取得 **`fwdc248b.bin`** 檔案。
 - **充飽電的電池。** 韌體更新過程中絕不能斷電。
 - **一張可以格式化的 SD 卡。**
 - **您的 LUT**：`.cube` 檔案（3D 或 1D），並確認它是為 **sRGB**（大多數 LUT）還是 **Adobe RGB** 製作的。
-- **建議：** 一張用您的 GR IV 拍攝的 DNG 照片。工具會用它在真實畫面上檢查風格，並製作預覽。
+- **建議：** 一張用您的 GR IV 或 GR IV HDF 拍攝的 DNG 照片。工具會用它在真實畫面上檢查風格，並製作預覽。
 - 記下您不想重新設定的自訂設定（C1、C2 等）。
 
 接著用[應用程式](#應用程式)或[命令列](#命令列)製作韌體。
@@ -114,7 +114,7 @@ GR IV 無法直接使用 LUT。它的風格由幾項原生控制組成：色彩�
 每個 zip 檔都由本儲存庫自己在 GitHub 上的建置流程產生，該流程會簽署一份來源記錄：儲存庫、建置以及程式碼的確切版本。您可以用 [GitHub CLI](https://cli.github.com)（先以 `gh auth login` 登入）確認您下載的正是該檔案，且未經更改或替換：
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.2.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 （請使用您下載的 zip 檔名；在 Windows 上，請在 PowerShell 中從「下載」資料夾執行。）結果最後會顯示「Verification succeeded!」，並列出產生該檔案的建置。出現任何其他結果都表示：請勿開啟，並從版本頁面重新下載。儲存庫的 **Attestations** 頁面列出所有已簽署的檔案。
@@ -163,7 +163,7 @@ gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonades
 
 - **macOS 表示應用程式已損毀**：請重新下載（檔案不完整），並依[確認檔案來自本專案](#下載)的說明檢查。
 - **應用程式在 Windows 上無法啟動**：請確認已解壓縮整個 zip 檔，並從解壓縮後的資料夾執行 `GR4-LUTSmith.exe`。
-- **韌體檔案遭拒**：應用程式只接受 RICOH 未經修改的 GR IV 1.11 `fwdc248b.bin`。已被 GR4-LUTSmith 修改過的檔案無法再次修改；請從未經修改的檔案開始。
+- **韌體檔案遭拒**：應用程式只接受 RICOH 未經修改的 GR IV / GR IV HDF 1.11 `fwdc248b.bin`。已被 GR4-LUTSmith 修改過的檔案無法再次修改；請從未經修改的檔案開始。
 
 ## 命令列
 
@@ -229,7 +229,7 @@ Then choose High Contrast in Image Control: your look is there.
 
 工具在開始時也會說明您的風格放在哪個欄位，例如 `slot: High Contrast (replaces the hidden monochrome High Contrast look)`。
 
-輸出資料夾 `output/my_look/` 也包含 `look.json`（擬合完成的風格），並可放入預覽（第 3 步）。您可以將 `look.json` 分享給其他 GR IV 使用者：他們不必重新擬合就能產生相同的風格（見[使用別人分享的風格](#使用別人分享的風格)）。
+輸出資料夾 `output/my_look/` 也包含 `look.json`（擬合完成的風格），並可放入預覽（第 3 步）。您可以將 `look.json` 分享給其他 GR IV 和 GR IV HDF 使用者：他們不必重新擬合就能產生相同的風格（見[使用別人分享的風格](#使用別人分享的風格)）。
 
 若 LUT 無法良好重現，或韌體檔案不是官方 1.11，工具會顯示 `refused: …`，且**不寫入任何韌體**。
 
@@ -255,7 +255,7 @@ uv run gr4_lutsmith.py preview output/my_look/look.json R0001234.DNG
 ### 2. 更新相機
 
 1. 裝入充飽電的電池和 SD 卡。
-2. 依照 RICOH 官方 GR IV 韌體更新說明，從相機的設定選單開始韌體更新。
+2. 依照 RICOH 官方 GR IV / GR IV HDF 韌體更新說明，從相機的設定選單開始韌體更新。
 3. **相機會顯示從版本 1.11 更新到版本 1.11。** 這是正常的：修改過的韌體保留原本的版本號碼。請確認更新。
 
 > [!CAUTION]
@@ -447,7 +447,8 @@ LUT 的完整色彩範圍和真實照片不一定一致：某個版本可能在�
 - **滑桿**（Key、Contrast、Highlight、Shadow、Sharpness、Shading、Clarity、Toning、Grain）作用於您的風格之上；設為 0 時就是 LUT 的效果。High Contrast 上不提供飽和度和色相；Cinema 欄位上則有（見[選擇欄位](#選擇欄位)）。
 - **兩個「標準」和兩個「HDR Tone」項目。** 黑白標準和 HDR 風格使用與彩色風格相同的名稱和圖示。
 - **RICOH 官方更新會移除您的風格。** 它會取代整個韌體。
-- **只適用於標準版 GR IV。** 絕對不要將此檔案安裝到其他機型。
+- **只適用於 GR IV 和 GR IV HDF。** 絕對不要將此檔案安裝到其他機型，也絕對不要安裝到 GR IV Monochrome。
+- **在 GR IV HDF 上使用 2.2.0 之前製作的檔案：** 風格仍在，但滑桿開啟時是 RICOH 為該欄位設定的值，而不是 0。請用 2.2.0 或更新版本重新產生相同的 `look.json`；`check` 會告訴您哪些檔案需要這樣做。在 GR IV 上這些檔案沒有問題。
 - **送修相機之前**，請先還原官方韌體。
 - **先多試幾個 LUT：** `uv run gr4_lutsmith.py fit my_look.cube --photo R0001234.DNG` 不需要韌體檔案即可擬合並回報結果。
 
@@ -486,11 +487,13 @@ uv run gr4_lutsmith.py selftest ~/Downloads/fwdc248b.bin
 | 滑桿開啟時為 0（顆粒關閉） | 由與已測試版本相同的變更組成（是其中的一部分）；尚未單獨安裝過 |
 | 需要兩條或三條色調曲線的風格（偏色、調色風格） | 已在 GR IV 1.11 上測試三條曲線 |
 | 分色相調整 | 已在 GR IV 1.11 的 RAW Development 中以底片模擬 LUT 測試（ISO 200，以綠色和黃色為主的日光場景）：相機與工具的預測一致，有色區域與 LUT 的差異減少約 30 %，色彩之間沒有可見的斷層。紅色、藍色、紫色和較高 ISO 尚未在相機上檢查 |
-| 曲線後色彩調整（`--after-curves`，選用） | 
+| 曲線後色彩調整（`--after-curves`，選用） | 已在 GR IV 1.11 上測試：正常運作；每輪需要更長時間；與 LUT 的平均差異較小，但在相同時間內，一般擬合多跑幾輪帶來的改善更大（見[哪個幫助更大](#哪個幫助更大)） |
 | Cinema (Yellow) / Cinema (Green) 欄位上的風格 | 已在 GR IV 1.11 上測試：正常運作 |
 | 其他欄位上的風格（Vivid、Positive Film、Negative Film、Bleach Bypass、Retro、黑白欄位） | 已在 GR IV 1.11 上測試：正常運作 |
 | 欄位的自訂名稱（`--name`） | 已在 GR IV 1.11 上測試：正常運作 |
 | 欄位的自訂圖示（`--icon`） | 已在 GR IV 1.11 上測試：正常運作 |
+| 在 GR IV HDF 上：相同的風格，滑桿同樣開啟時為 0（2.2.0） | 已在 GR IV HDF 1.11 上測試：正常運作 |
+| 在 GR IV 上使用 2.2.0 的檔案 | 已離線檢查：唯一新增的是 GR IV HDF 專屬的滑桿設定；GR IV 讀取的內容與 2.1.1 完全相同；尚未實際安裝過 |
 | 從分享的 `look.json` 產生 | 已離線檢查：韌體與使用相同 LUT 結果、欄位、名稱和圖示的 `make` 逐位元組相同；沒有任何新內容進入相機 |
 | 應用程式（`GR4-LUTSmith`）產生與命令列相同的韌體 | 已離線檢查：相同的 LUT、照片和選擇下逐位元組相同 |
 | 同時執行多輪（`--jobs`，應用程式的「同時執行」） | 已離線檢查：結果與依序執行相同輪次逐位元組相同 |
@@ -518,5 +521,5 @@ GR4-LUTSmith/
 
 | 檔案 | SHA-256 |
 | --- | --- |
-| RICOH 官方 GR IV 1.11 `fwdc248b.bin` | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
-| 範例韌體（`selftest`，由 `examples/film-1d.look.json` 產生） | `d201add28bc3ab738bc92fcfdaafa3847bc881bfd7eecb6b7e8f331d1289f052` |
+| RICOH 官方 GR IV / GR IV HDF 1.11 `fwdc248b.bin` | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
+| 範例韌體（`selftest`，由 `examples/film-1d.look.json` 產生） | `bb838b5426249f27da68b410223f6c24df36c4816abdaf156472a2a3b61d4441` |

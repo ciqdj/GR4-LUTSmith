@@ -24,7 +24,7 @@ def check_firmware(path):
         kind = gl.inspect_firmware(data)['kind'] if len(data) < 64 * 1024 * 1024 else None
         if kind == 'lutsmith':
             raise Problem(t('This file was already changed by GR4-LUTSmith. Start from the unmodified 1.11 file.'))
-        raise Problem(t("This is not RICOH's unmodified GR IV 1.11 firmware. Choose the unmodified file {file}, "
+        raise Problem(t("This is not RICOH's unmodified GR IV / GR IV HDF 1.11 firmware. Choose the unmodified file {file}, "
                         "version 1.11.", file='fwdc248b.bin'))
     out = gl.make_firmware(data, gl.load_look(EXAMPLE_LOOK), log=lambda _: None)
     if gl.sha256(out) != gl.SELFTEST_SHA256:

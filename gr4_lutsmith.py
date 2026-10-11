@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""GR4-LUTSmith: put the look of a .cube LUT into your RICOH GR IV (firmware 1.11).
+"""GR4-LUTSmith: put the look of a .cube LUT into your RICOH GR IV or GR IV HDF (firmware 1.11).
 
 Fits the LUT to the camera's own look processing (a colour matrix, tone
 curves, per-hue colour sectors and, with --after-curves, a colour mix after
 the curves) and writes a firmware file that carries the result as an extra
 Image Control look. With --turns, several fits from different starting points
 are run and the good ones kept. Starts from the official RICOH firmware file
-you downloaded yourself. A file is written only if every check passes.
+you downloaded yourself (RICOH ships one 1.11 file for the GR IV and the GR IV
+HDF; the result works on both). A file is written only if every check passes.
 
 Usage
   python3 gr4_lutsmith.py make     LUT.cube OFFICIAL_fwdc248b.bin [--space srgb|adobe] [--slot SLOT] [--photo DNG] [--no-hue] [--after-curves] [--turns N] [--seed S] [-o DIR]
@@ -31,7 +32,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '2.1.1'
+VERSION = '2.2.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -42,7 +43,7 @@ OTHER_KNOWN = {
 
 # Built-in example: examples/film-1d.look.json must build to exactly this image (selftest).
 SELFTEST_LOOK = 'examples/film-1d.look.json'
-SELFTEST_SHA256 = 'd201add28bc3ab738bc92fcfdaafa3847bc881bfd7eecb6b7e8f331d1289f052'
+SELFTEST_SHA256 = 'bb838b5426249f27da68b410223f6c24df36c4816abdaf156472a2a3b61d4441'
 
 HEADER, MAGIC, FOOTER_MAGIC = 128, b'RICOH\0\0\0', b'\xa5\x5a\x5a\xa5'
 MAX_DISTANCE = 0x2000
@@ -657,6 +658,134 @@ HdgICwzigvNU8rs/30SFKwtvIRcg4+Ny6ItrYDIgzwdwp9QyRfR/9nDvzS5qDJhK+CinRDrZ83+vq+5A
 XySBORF1nTK4U8Cadl4J+AE6thXYFgqsTHH9grvk/wEl5U98
 '''
 SLOT_DATA = json.loads(zlib.decompress(base64.b64decode(''.join(_SLOTS.split()))))
+# The GR IV HDF keeps its own slider defaults: the same neutral defaults for it, per slot ('fixed': High Contrast),
+# with their original bytes, which are checked.
+_HDF = '''
+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
+'''
+HDF = json.loads(zlib.decompress(base64.b64decode(''.join(_HDF.split()))))
 SLOT_NAMES = {'high-contrast': 'High Contrast', 'cinema-yellow': 'Cinema (Yellow)', 'cinema-green': 'Cinema (Green)',
               'vivid': 'Vivid', 'positive-film': 'Positive Film', 'negative-film': 'Negative Film',
               'bleach-bypass': 'Bleach Bypass', 'retro': 'Retro', 'soft-monotone': 'Soft Monotone',
@@ -824,7 +953,7 @@ def slot_changes(look, name):
     """(offset, old, new, what) for a look on Cinema (Yellow) or Cinema (Green): the look, neutral slider defaults
     and its colour after the curves."""
     s, label = SLOT_DATA['slots'][name], SLOT_NAMES[name]
-    out = [(o, a, b, f'{label}: neutral slider defaults') for o, a, b in s['defaults']]
+    out = [(o, a, b, f'{label}: neutral slider defaults') for o, a, b in s['defaults'] + HDF['slots'].get(name, [])]
     out.append((s['matrix'][0], s['matrix'][1], matrix_hex(look), f'{label}: look colour matrix'))
     so, sold = s['curve_switch']
     curves = look.get('curves')
@@ -893,7 +1022,7 @@ def extra_space(look, name):
 def extra_changes(look, name, space):
     """(offset, old, new, what) for a look on one of the further slots."""
     s, label, tpl = SLOT_DATA['extra'][name], SLOT_NAMES[name], SLOT_DATA['templates']
-    out = [(o, a, b, f'{label}: neutral slider defaults') for o, a, b in s['defaults']]
+    out = [(o, a, b, f'{label}: neutral slider defaults') for o, a, b in s['defaults'] + HDF['slots'].get(name, [])]
     out += [(o, a, b, f'{label}: a colour look with your colours only') for o, a, b in s['fixed']]
     out.append((s['matrix'][0], s['matrix'][1], matrix_hex(look), f'{label}: look colour matrix'))
 
@@ -1198,6 +1327,8 @@ def all_changes(looks):
     unlock = set(SLOT_DATA['unlock'])                # without a High Contrast look, that slot stays as it was
     fixed = [(o, a, b, DATA_WHAT) for o, a, b in DATA['fixed']
              if (o in unlock or DEFAULT_SLOT in names) and o not in taken]
+    if DEFAULT_SLOT in names:
+        fixed += [(o, a, b, DATA_WHAT) for o, a, b in HDF['fixed']]
     return fixed + out
 
 
@@ -1206,9 +1337,9 @@ def make_firmware(source, looks, log=print):
     if digest != OFFICIAL_SHA256 or len(source) != OFFICIAL_BYTES:
         if digest in OTHER_KNOWN:
             raise Refused(f'this is {OTHER_KNOWN[digest]}; use the official RICOH file')
-        raise Refused('input is not the official RICOH GR IV 1.11 fwdc248b.bin '
+        raise Refused('input is not the official RICOH 1.11 fwdc248b.bin for the GR IV / GR IV HDF '
                       f'(SHA-256 {digest}, expected {OFFICIAL_SHA256})')
-    log('input: official RICOH GR IV 1.11 firmware (SHA-256 verified)')
+    log('input: official RICOH 1.11 firmware for the GR IV / GR IV HDF (SHA-256 verified)')
     log('decoding container ...')
     payload, frames, consumed = decode(source)
     check_container(source, payload, consumed)
@@ -1283,10 +1414,10 @@ def write_atomic(data, out_dir):
 def inspect_firmware(data):
     """What a fwdc248b.bin is, as data: sha256, bytes, valid (container) and error, kind ('official', 'known',
     'unknown' or 'lutsmith'), name (for official/known), and for a GR4-LUTSmith file its looks: one dict per slot
-    with slot, hue (hue sectors), post (colour after the curves), name (shown name when renamed), icon (own icon) and,
-    for High Contrast, matrix."""
+    with slot, hue (hue sectors), post (colour after the curves), hdf (neutral slider defaults on a GR IV HDF too;
+    False in files made before 2.2.0), name (shown name when renamed), icon (own icon) and, for High Contrast, matrix."""
     digest = sha256(data)
-    names = {OFFICIAL_SHA256: 'official RICOH GR IV 1.11 (unmodified)', **OTHER_KNOWN}
+    names = {OFFICIAL_SHA256: 'official RICOH 1.11 for the GR IV / GR IV HDF (unmodified)', **OTHER_KNOWN}
     out = dict(sha256=digest, bytes=len(data), valid=False, error=None, kind=None, name=None, looks=[])
     try:
         payload = check_container(data)
@@ -1307,12 +1438,12 @@ def inspect_firmware(data):
     if has([c for c in DATA['fixed'] if c[0] not in unlock and c[0] not in post_rows]):
         m = struct.unpack_from('<9h', payload, LOOK['matrix'][0])
         looks.append(dict(slot=DEFAULT_SLOT, matrix=[list(m[i:i + 3]) for i in (0, 3, 6)], hue=has(HUE['fixed']),
-                          post=post))
+                          post=post, hdf=has(HDF['fixed'])))
     for name, sd in SLOT_DATA['slots'].items():
         if has(sd['defaults']):
             off, old = sd['hue']['table']
             hue = payload[off:off + len(old) // 2].hex() != old and not has(sd['hue']['off'])
-            looks.append(dict(slot=name, hue=hue, post=has(sd['post']['fixed'])))
+            looks.append(dict(slot=name, hue=hue, post=has(sd['post']['fixed']), hdf=has(HDF['slots'].get(name, []))))
     for name, sd in SLOT_DATA['extra'].items():
         sign = sd['defaults'] + sd['fixed']          # the slot's own look-independent changes
         if sign and has(sign):
@@ -1320,7 +1451,7 @@ def inspect_firmware(data):
                 return any(payload[o:o + 4].hex() != base for o, _, base in sd['rows'][t])
             ht = sd.get('hue_table')
             hue = moved('hue') or (ht is not None and payload[ht[0]:ht[0] + len(ht[1]) // 2].hex() != ht[1])
-            looks.append(dict(slot=name, hue=hue, post=moved('colour')))
+            looks.append(dict(slot=name, hue=hue, post=moved('colour'), hdf=has(HDF['slots'].get(name, []))))
 
     def shown_name(slot):
         """The slot's English name as stored, when it was renamed."""
@@ -1372,6 +1503,10 @@ def identify(data, log=print):
         found.append(f + (f' named "{lk["name"]}"' if lk['name'] else '') + (' with its own icon' if lk['icon'] else ''))
     log('file     a GR4-LUTSmith firmware; ' + ('personal looks in: ' + '; '.join(found) if found else
                                                  'no personal look (hidden looks unlocked only)'))
+    old = [SLOT_NAMES[lk['slot']] for lk in r['looks'] if not lk['hdf']]
+    if old:
+        log('note     made before 2.2.0: on a GR IV HDF these looks open with RICOH\'s slider settings instead of 0: '
+            + ', '.join(old) + '. Fine on a GR IV; for an HDF, build them again (build look.json).')
     return 0
 
 
@@ -2745,7 +2880,8 @@ def main(argv=None):
         p.add_argument('lut', type=Path, help='.cube file (3D or 1D)')
         p.add_argument('--space', choices=('srgb', 'adobe'), default='srgb',
                        help='colour space the LUT was made for (default srgb)')
-        p.add_argument('--photo', type=Path, help='a DNG from your GR IV: judges the fit on real content (needs rawpy)')
+        p.add_argument('--photo', type=Path,
+                       help='a DNG from your GR IV or GR IV HDF: judges the fit on real content (needs rawpy)')
         p.add_argument('--curve', choices=('auto', 'single', 'pair', 'rgb'), default='auto', help=argparse.SUPPRESS)
         p.add_argument('--no-hue', action='store_true', help='do not use hue sectors (colour changes per hue)')
         p.add_argument('--slot', choices=tuple(SLOT_NAMES), default=DEFAULT_SLOT,
@@ -2769,7 +2905,7 @@ def main(argv=None):
         p.add_argument('--iters', type=int, default=1500, help=argparse.SUPPRESS)
     m = sub.add_parser('make', help='LUT + official firmware -> firmware with the look')
     lut_args(m)
-    m.add_argument('input', type=Path, help='official RICOH fwdc248b.bin (GR IV 1.11)')
+    m.add_argument('input', type=Path, help='official RICOH fwdc248b.bin (1.11, GR IV / GR IV HDF)')
     m.add_argument('--force', action='store_true', help='build even if the fit is poor')
     m.add_argument('-o', '--output-dir', type=Path)
     f = sub.add_parser('fit', help='fit a LUT only (writes look.json)')
@@ -2778,7 +2914,7 @@ def main(argv=None):
     b = sub.add_parser('build', help='look.json file(s) + official firmware -> firmware with the look(s)')
     b.add_argument('looks', type=Path, nargs='+', metavar='look.json',
                    help='one look per slot (each look.json says its slot)')
-    b.add_argument('input', type=Path, help='official RICOH fwdc248b.bin (GR IV 1.11)')
+    b.add_argument('input', type=Path, help='official RICOH fwdc248b.bin (1.11, GR IV / GR IV HDF)')
     b.add_argument('--slot', choices=tuple(SLOT_NAMES), help='put the look on this slot instead of the one its '
                                                               'look.json says (one look only)')
     b.add_argument('--name', help='show the slot under this name instead of the look.json\'s (one look only)')

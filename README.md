@@ -5,7 +5,7 @@
 <h1 align="center">GR4-LUTSmith</h1>
 
 <p align="center">
-  <strong>Your own colour look, from a <code>.cube</code> LUT, inside your RICOH GR IV.</strong>
+  <strong>Your own colour look, from a <code>.cube</code> LUT, inside your RICOH GR IV or GR IV HDF.</strong>
 </p>
 
 <p align="center">
@@ -19,8 +19,8 @@
   <a href="README.es.md">Español</a>
 </p>
 
-GR4-LUTSmith takes a colour-grading LUT (`.cube`) and builds a GR IV firmware
-that carries its look as an **Image Control** look. You can shoot with it in
+GR4-LUTSmith takes a colour-grading LUT (`.cube`) and builds a GR IV / GR IV HDF
+firmware that carries its look as an **Image Control** look. You can shoot with it in
 stills, in movie mode and in the viewfinder, and use it in **RAW Development**.
 Everything else on your camera stays exactly as it was, and you can go back to
 the official firmware at any time.
@@ -120,20 +120,20 @@ After installing, the Image Control list ends like this:
 
 ## Before you start
 
-- **Camera:** RICOH GR IV (the standard colour model). Other models are not
-  supported.
+- **Camera:** RICOH GR IV or GR IV HDF. RICOH's 1.11 update is one file for both, and so is the file this
+  tool makes. Other models, including the GR IV Monochrome, are not supported.
 - **Your camera must already be on firmware 1.11.** Check the version in the
   camera's setup menu.
   - Older version: first update to 1.11 the normal way, with RICOH's official file.
   - Newer version: **do not use this tool.** It only supports 1.11.
-- **The official firmware file.** From RICOH IMAGING's official GR IV support
-  page, download **firmware version 1.11**. Unpack it if needed until you have
+- **The official firmware file.** From RICOH IMAGING's official GR IV (or GR IV HDF)
+  support page, download **firmware version 1.11**. Unpack it if needed until you have
   the file **`fwdc248b.bin`**.
 - **A fully charged battery.** A firmware update must never lose power.
 - **An SD card** you can format.
 - **Your LUT** as a `.cube` file (3D or 1D), and whether it was made for
   **sRGB** (most LUTs) or **Adobe RGB**.
-- **Recommended:** a DNG photo taken with your GR IV. The tool uses it to check
+- **Recommended:** a DNG photo taken with your GR IV or GR IV HDF. The tool uses it to check
   the look on real content and to make a preview.
 - Note down any custom settings (C1, C2, …) you would not want to set up again.
 
@@ -167,7 +167,7 @@ repository, the build and the exact version of the code. You can check that your
 not changed or replaced, with the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`):
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.2.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (use the name of the zip you downloaded; on Windows, run it in PowerShell from your Downloads folder). It ends with
@@ -233,7 +233,7 @@ slot with its name and icon, the fit, and the build. It saves `fwdc248b.bin` whe
   [Check it came from this project](#download).
 - **The app does not start on Windows**: make sure you extracted the whole zip and run `GR4-LUTSmith.exe` from
   the extracted folder.
-- **The firmware file is refused**: the app only accepts RICOH's unmodified GR IV 1.11 `fwdc248b.bin`. A file
+- **The firmware file is refused**: the app only accepts RICOH's unmodified GR IV / GR IV HDF 1.11 `fwdc248b.bin`. A file
   GR4-LUTSmith already changed cannot be changed again; start from the unmodified file.
 
 ## The command line
@@ -305,7 +305,7 @@ The tool also says at the start which slot your look goes to, for example
 
 The output folder `output/my_look/` also contains `look.json` (the fitted
 look) and can take a preview (step 3). You can share `look.json` with other
-GR IV owners: they build the same look without fitting it again (see
+GR IV and GR IV HDF owners: they build the same look without fitting it again (see
 [Using a look someone shared](#using-a-look-someone-shared)).
 
 If the LUT cannot be reproduced well, or the firmware file is not the official
@@ -341,7 +341,7 @@ The same for a firmware from the app and from the command line.
 
 1. Insert the fully charged battery and the SD card.
 2. Start the firmware update from the camera's setup menu, as described in
-   RICOH's official GR IV firmware update instructions.
+   RICOH's official GR IV / GR IV HDF firmware update instructions.
 3. **The camera shows an update from version 1.11 to version 1.11.** This is
    expected: the modified firmware keeps the version number. Confirm the update.
 
@@ -659,7 +659,11 @@ The tool says which rule applied. Otherwise it writes no firmware; add
   looks use the same names and icons as the colour ones.
 - **An official RICOH update removes your look.** It replaces the whole
   firmware.
-- **Only for the standard GR IV.** Never install the file on another model.
+- **Only for the GR IV and the GR IV HDF.** Never install the file on another model, and never on a GR IV
+  Monochrome.
+- **Files made before 2.2.0 on a GR IV HDF:** the look is there, but the sliders open with RICOH's settings for
+  that slot instead of 0. Build the same `look.json` again with 2.2.0 or later; `check` tells you which files
+  need it. On a GR IV they are fine.
 - **Before sending the camera for service,** go back to the official firmware.
 - **Try many LUTs first:** `uv run gr4_lutsmith.py fit my_look.cube --photo R0001234.DNG`
   fits and reports without needing the firmware file.
@@ -706,11 +710,13 @@ result with the tested build. It prints `selftest: PASSED`.
 | Sliders opening at 0 (grain off) | made of the same changes as the tested build (a subset of them); not installed on its own yet |
 | Looks that need two or three tone curves (colour casts, toned looks) | three curves tested on a GR IV 1.11 |
 | Hue sectors | tested on a GR IV 1.11 in RAW Development with a film-simulation LUT (ISO 200, a daylight scene of greens and yellows): the camera matched the tool's prediction, the difference to the LUT fell by about 30 % on coloured areas, and no gaps between colours were visible. Reds, blues, purples and higher ISO have not been checked on the camera yet |
-| Colour after the curves (`--after-curves`, optional) | 
+| Colour after the curves (`--after-curves`, optional) | tested on a GR IV 1.11: works; each turn takes longer; the average difference to the LUT is smaller, but in the same time more turns of the usual fit gain more (see [Which helps more](#which-helps-more)) |
 | Looks on the Cinema (Yellow) / Cinema (Green) slots | tested on a GR IV 1.11: works |
 | Looks on the other slots (Vivid, Positive Film, Negative Film, Bleach Bypass, Retro, the monochrome slots) | tested on a GR IV 1.11: works |
 | Your own name for the slot (`--name`) | tested on a GR IV 1.11: works |
 | Your own icon for the slot (`--icon`) | tested on a GR IV 1.11: works |
+| On a GR IV HDF: the same looks, with the sliders at 0 there too (2.2.0) | tested on a GR IV HDF 1.11: works |
+| A 2.2.0 file on a GR IV | checked offline: the only additions are the GR IV HDF's own slider settings; a GR IV reads exactly what it read with 2.1.1; not installed yet |
 | Building from a shared `look.json` | checked offline: the firmware is byte-identical to `make` with the same LUT result, slot, name and icon; nothing new reaches the camera |
 | The app (`GR4-LUTSmith`) builds the same firmware as the command line | checked offline: byte-identical for the same LUT, photo and choices |
 | Turns side by side (`--jobs`, the app's "Run at once") | checked offline: the same results, byte for byte, as the same turns one after another |
@@ -739,5 +745,5 @@ GR4-LUTSmith/
 
 | File | SHA-256 |
 | --- | --- |
-| official RICOH GR IV 1.11 `fwdc248b.bin` | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
-| example firmware (`selftest`, from `examples/film-1d.look.json`) | `d201add28bc3ab738bc92fcfdaafa3847bc881bfd7eecb6b7e8f331d1289f052` |
+| official RICOH GR IV / GR IV HDF 1.11 `fwdc248b.bin` | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
+| example firmware (`selftest`, from `examples/film-1d.look.json`) | `bb838b5426249f27da68b410223f6c24df36c4816abdaf156472a2a3b61d4441` |

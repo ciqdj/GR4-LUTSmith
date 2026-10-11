@@ -5,7 +5,7 @@
 <h1 align="center">GR4-LUTSmith</h1>
 
 <p align="center">
-  <strong>Tu propio look de color, a partir de una LUT <code>.cube</code>, dentro de tu RICOH GR IV.</strong>
+  <strong>Tu propio look de color, a partir de una LUT <code>.cube</code>, dentro de tu RICOH GR IV o GR IV HDF.</strong>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
   <strong>Español</strong>
 </p>
 
-GR4-LUTSmith toma una LUT de gradación de color (`.cube`) y crea un firmware para la GR IV
+GR4-LUTSmith toma una LUT de gradación de color (`.cube`) y crea un firmware para la GR IV / GR IV HDF
 que lleva su look como un look de **Control de imagen**. Puedes usarlo al hacer
 fotos, en modo vídeo y en el visor, y también en **RAW Development**.
 Todo lo demás de tu cámara queda exactamente como estaba, y puedes volver al
@@ -124,13 +124,13 @@ Saturación, Matiz y Estándar, en español).
 
 ## Antes de empezar
 
-- **Cámara:** RICOH GR IV (el modelo en color estándar). Otros modelos no son
-  compatibles.
+- **Cámara:** RICOH GR IV o GR IV HDF. La actualización 1.11 de RICOH es un solo archivo para ambas, y también lo es
+  el archivo que crea esta herramienta. Otros modelos, incluida la GR IV Monochrome, no son compatibles.
 - **Tu cámara ya debe tener el firmware 1.11.** Comprueba la versión en el menú
   de configuración de la cámara.
   - Versión anterior: actualiza primero a la 1.11 de la forma normal, con el archivo oficial de RICOH.
   - Versión más reciente: **no uses esta herramienta.** Solo es compatible con la 1.11.
-- **El archivo de firmware oficial.** En la página oficial de soporte de la GR IV
+- **El archivo de firmware oficial.** En la página oficial de soporte de la GR IV (o de la GR IV HDF)
   de RICOH IMAGING, descarga la **versión de firmware 1.11**. Descomprímela si hace
   falta hasta tener el archivo **`fwdc248b.bin`**.
 - **Una batería totalmente cargada.** Una actualización de firmware nunca debe
@@ -138,7 +138,7 @@ Saturación, Matiz y Estándar, en español).
 - **Una tarjeta SD** que puedas formatear.
 - **Tu LUT** como archivo `.cube` (3D o 1D), y saber si se hizo para **sRGB**
   (la mayoría de las LUT) o para **Adobe RGB**.
-- **Recomendado:** una foto DNG hecha con tu GR IV. La herramienta la usa para
+- **Recomendado:** una foto DNG hecha con tu GR IV o GR IV HDF. La herramienta la usa para
   comprobar el look con contenido real y para crear una vista previa.
 - Apunta los ajustes personalizados (C1, C2, …) que no quieras tener que volver a configurar.
 
@@ -173,7 +173,7 @@ archivo y que no se ha modificado ni sustituido, con la [GitHub CLI](https://cli
 iniciada mediante `gh auth login`):
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.2.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (usa el nombre del zip que descargaste; en Windows, ejecútalo en PowerShell desde tu carpeta Descargas). Termina
@@ -243,7 +243,7 @@ posición con su nombre y su icono, el ajuste y la creación. Guarda `fwdc248b.b
   [Comprueba que viene de este proyecto](#descarga).
 - **La app no se inicia en Windows**: asegúrate de haber extraído el zip completo y ejecuta `GR4-LUTSmith.exe` desde
   la carpeta extraída.
-- **El archivo de firmware es rechazado**: la app solo acepta el `fwdc248b.bin` 1.11 de la GR IV de RICOH sin modificar.
+- **El archivo de firmware es rechazado**: la app solo acepta el `fwdc248b.bin` 1.11 de la GR IV / GR IV HDF de RICOH sin modificar.
   Un archivo que GR4-LUTSmith ya ha cambiado no se puede volver a cambiar; parte del archivo sin modificar.
 
 ## La línea de comandos
@@ -315,7 +315,7 @@ Al principio, la herramienta también indica a qué posición va tu look, por ej
 
 La carpeta de salida `output/my_look/` contiene además `look.json` (el look
 ajustado) y puede guardar una vista previa (paso 3). Puedes compartir `look.json`
-con otros propietarios de una GR IV: crean el mismo look sin tener que ajustarlo
+con otros propietarios de una GR IV o una GR IV HDF: crean el mismo look sin tener que ajustarlo
 de nuevo (consulta [Usar un look compartido](#usar-un-look-compartido)).
 
 Si la LUT no se puede reproducir bien, o el archivo de firmware no es el 1.11
@@ -351,7 +351,7 @@ Es igual para un firmware creado con la app o con la línea de comandos.
 
 1. Inserta la batería totalmente cargada y la tarjeta SD.
 2. Inicia la actualización de firmware desde el menú de configuración de la cámara,
-   como se describe en las instrucciones oficiales de RICOH para actualizar el firmware de la GR IV.
+   como se describe en las instrucciones oficiales de RICOH para actualizar el firmware de la GR IV / GR IV HDF.
 3. **La cámara muestra una actualización de la versión 1.11 a la versión 1.11.** Es
    lo esperado: el firmware modificado mantiene el número de versión. Confirma la actualización.
 
@@ -674,7 +674,11 @@ La herramienta indica qué regla se aplicó. Si no, no escribe ningún firmware;
   usan los mismos nombres e iconos que los de color.
 - **Una actualización oficial de RICOH elimina tu look.** Reemplaza todo el
   firmware.
-- **Solo para la GR IV estándar.** Nunca instales el archivo en otro modelo.
+- **Solo para la GR IV y la GR IV HDF.** Nunca instales el archivo en otro modelo, ni en una GR IV
+  Monochrome.
+- **Archivos creados antes de la 2.2.0, en una GR IV HDF:** el look está ahí, pero los controles se abren con los
+  ajustes de RICOH para esa posición en lugar de a 0. Vuelve a crear el mismo `look.json` con la 2.2.0 o posterior;
+  `check` te indica qué archivos lo necesitan. En una GR IV están bien.
 - **Antes de enviar la cámara al servicio técnico,** vuelve al firmware oficial.
 - **Prueba primero muchas LUT:** `uv run gr4_lutsmith.py fit my_look.cube --photo R0001234.DNG`
   ajusta e informa sin necesitar el archivo de firmware.
@@ -721,11 +725,13 @@ compilación probada. Muestra `selftest: PASSED`.
 | Controles que empiezan en 0 (grano desactivado) | formado por los mismos cambios que la compilación probada (una parte de ellos); todavía no se ha instalado por separado |
 | Looks que necesitan dos o tres curvas tonales (dominantes de color, looks virados) | tres curvas probadas en una GR IV 1.11 |
 | Sectores de matiz | probado en una GR IV 1.11 en RAW Development con una LUT de simulación de película (ISO 200, una escena a la luz del día con verdes y amarillos): la cámara coincidió con la predicción de la herramienta, la diferencia con la LUT bajó alrededor de un 30 % en las zonas de color y no se vieron huecos entre colores. Los rojos, azules, morados y las ISO más altas aún no se han comprobado en la cámara |
-| Color tras las curvas (`--after-curves`, opcional) | 
+| Color tras las curvas (`--after-curves`, opcional) | probado en una GR IV 1.11: funciona; cada ronda tarda más; la diferencia media con la LUT es menor, pero en el mismo tiempo más rondas del ajuste habitual dan más mejora (ver [Qué ayuda más](#qué-ayuda-más)) |
 | Looks en las posiciones Cinema (Yellow) / Cinema (Green) | probado en una GR IV 1.11: funciona |
 | Looks en las demás posiciones (Vivid, Positive Film, Negative Film, Bleach Bypass, Retro, las posiciones monocromas) | probado en una GR IV 1.11: funciona |
 | Tu propio nombre para la posición (`--name`) | probado en una GR IV 1.11: funciona |
 | Tu propio icono para la posición (`--icon`) | probado en una GR IV 1.11: funciona |
+| En una GR IV HDF: los mismos looks, también allí con los controles a 0 (2.2.0) | probado en una GR IV HDF 1.11: funciona |
+| Un archivo de la 2.2.0 en una GR IV | comprobado sin la cámara: lo único que se añade son los ajustes de los controles propios de la GR IV HDF; una GR IV lee exactamente lo mismo que con la 2.1.1; todavía no se ha instalado |
 | Crear a partir de un `look.json` compartido | comprobado sin la cámara: el firmware es idéntico byte a byte al de `make` con el mismo resultado de la LUT, posición, nombre e icono; no llega nada nuevo a la cámara |
 | La app (`GR4-LUTSmith`) crea el mismo firmware que la línea de comandos | comprobado sin la cámara: idéntico byte a byte con la misma LUT, foto y opciones |
 | Rondas a la vez (`--jobs`, «A la vez» en la app) | comprobado sin la cámara: los mismos resultados, byte a byte, que las mismas rondas una tras otra |
@@ -754,5 +760,5 @@ GR4-LUTSmith/
 
 | Archivo | SHA-256 |
 | --- | --- |
-| `fwdc248b.bin` oficial de RICOH GR IV 1.11 | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
-| firmware de ejemplo (`selftest`, a partir de `examples/film-1d.look.json`) | `d201add28bc3ab738bc92fcfdaafa3847bc881bfd7eecb6b7e8f331d1289f052` |
+| `fwdc248b.bin` oficial de RICOH GR IV / GR IV HDF 1.11 | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
+| firmware de ejemplo (`selftest`, a partir de `examples/film-1d.look.json`) | `bb838b5426249f27da68b410223f6c24df36c4816abdaf156472a2a3b61d4441` |

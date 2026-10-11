@@ -5,7 +5,7 @@
 <h1 align="center">GR4-LUTSmith</h1>
 
 <p align="center">
-  <strong><code>.cube</code> LUT로 만든 나만의 컬러 룩을 RICOH GR IV 안에 담습니다.</strong>
+  <strong><code>.cube</code> LUT로 만든 나만의 컬러 룩을 RICOH GR IV 또는 GR IV HDF 안에 담습니다.</strong>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 </p>
 
 GR4-LUTSmith는 컬러 그레이딩 LUT(`.cube`)를 받아, 그 룩을 **화상 컨트롤** 룩으로
-담은 GR IV 펌웨어를 만듭니다. 이 룩으로 사진, 동영상 모드, 뷰파인더에서 촬영할 수
+담은 GR IV / GR IV HDF 펌웨어를 만듭니다. 이 룩으로 사진, 동영상 모드, 뷰파인더에서 촬영할 수
 있고, **RAW Development**에서도 사용할 수 있습니다. 카메라의 나머지는 모두 그대로
 유지되며, 언제든지 공식 펌웨어로 되돌릴 수 있습니다.
 
@@ -115,18 +115,19 @@ GR IV는 LUT를 직접 실행하지 않습니다. 카메라의 룩은 몇 가지
 
 ## 시작하기 전에
 
-- **카메라:** RICOH GR IV(표준 컬러 모델). 다른 모델은 지원하지 않습니다.
+- **카메라:** RICOH GR IV 또는 GR IV HDF. RICOH의 1.11 업데이트는 두 모델 공통의 파일 하나이며, 이 도구가
+  만드는 파일도 마찬가지입니다. GR IV Monochrome을 포함한 다른 모델은 지원하지 않습니다.
 - **카메라가 이미 펌웨어 1.11이어야 합니다.** 카메라의 설정 메뉴에서 버전을
   확인하세요.
   - 이전 버전: 먼저 RICOH 공식 파일로 일반적인 방법에 따라 1.11로 업데이트하세요.
   - 더 새로운 버전: **이 도구를 사용하지 마세요.** 1.11만 지원합니다.
-- **공식 펌웨어 파일.** RICOH IMAGING의 공식 GR IV 지원 페이지에서 **펌웨어 버전 1.11**을
+- **공식 펌웨어 파일.** RICOH IMAGING의 공식 GR IV(또는 GR IV HDF) 지원 페이지에서 **펌웨어 버전 1.11**을
   다운로드하세요. 필요하면 압축을 풀어 **`fwdc248b.bin`** 파일을 얻으세요.
 - **완전히 충전된 배터리.** 펌웨어 업데이트 중에는 절대 전원이 끊기면 안 됩니다.
 - 포맷해도 되는 **SD 카드**.
 - `.cube` 파일(3D 또는 1D)로 된 **LUT**, 그리고 그 LUT가 **sRGB**(대부분의 LUT)용인지
   **Adobe RGB**용인지에 대한 정보.
-- **권장:** GR IV로 찍은 DNG 사진. 도구는 이 사진으로 실제 장면에서 룩을 확인하고
+- **권장:** GR IV 또는 GR IV HDF로 찍은 DNG 사진. 도구는 이 사진으로 실제 장면에서 룩을 확인하고
   미리 보기를 만듭니다.
 - 다시 설정하고 싶지 않은 사용자 설정(C1, C2, …)은 적어 두세요.
 
@@ -161,7 +162,7 @@ Intel입니다.
 파일이 바로 그 파일이며 변경되거나 바꿔치기되지 않았는지 확인할 수 있습니다.
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.2.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (다운로드한 zip의 이름을 사용하세요. Windows에서는 다운로드 폴더에서 PowerShell로
@@ -235,7 +236,7 @@ gh attestation verify GR4-LUTSmith-2.1.1-macOS-AppleSilicon.zip --repo lemonades
   것입니다), [이 프로젝트에서 만든 파일인지 확인하기](#다운로드)의 방법으로 확인하세요.
 - **Windows에서 앱이 시작되지 않을 때**: zip 전체의 압축을 풀었는지 확인하고, 압축을 푼
   폴더에서 `GR4-LUTSmith.exe`를 실행하세요.
-- **펌웨어 파일이 거부될 때**: 앱은 수정되지 않은 RICOH GR IV 1.11 `fwdc248b.bin`만
+- **펌웨어 파일이 거부될 때**: 앱은 수정되지 않은 RICOH GR IV / GR IV HDF 1.11 `fwdc248b.bin`만
   받아들입니다. 이미 GR4-LUTSmith로 변경한 파일은 다시 변경할 수 없습니다. 수정되지 않은
   파일에서 시작하세요.
 
@@ -307,7 +308,7 @@ Then choose High Contrast in Image Control: your look is there.
 `slot: High Contrast (replaces the hidden monochrome High Contrast look)`.
 
 출력 폴더 `output/my_look/`에는 `look.json`(피팅된 룩)도 들어 있으며, 미리 보기
-(3단계)도 이 폴더에 만들 수 있습니다. `look.json`은 다른 GR IV 사용자와 공유할 수
+(3단계)도 이 폴더에 만들 수 있습니다. `look.json`은 다른 GR IV 및 GR IV HDF 사용자와 공유할 수
 있습니다. 받은 사람은 다시 피팅하지 않고 같은 룩을 빌드합니다
 ([공유받은 룩 사용하기](#공유받은-룩-사용하기) 참조).
 
@@ -342,7 +343,7 @@ LUT 자체, 그리고 룩을 **적용한** 카메라입니다. LUT 패널에는 
 ### 2. 카메라 업데이트하기
 
 1. 완전히 충전된 배터리와 SD 카드를 넣으세요.
-2. RICOH 공식 GR IV 펌웨어 업데이트 안내에 따라 카메라의 설정 메뉴에서 펌웨어
+2. RICOH 공식 GR IV / GR IV HDF 펌웨어 업데이트 안내에 따라 카메라의 설정 메뉴에서 펌웨어
    업데이트를 시작하세요.
 3. **카메라에 버전 1.11에서 버전 1.11로 업데이트한다고 표시됩니다.** 이는 정상입니다.
    수정된 펌웨어는 버전 번호를 그대로 유지합니다. 업데이트를 확인하세요.
@@ -642,7 +643,11 @@ LUT에서 두 번째 버전이 생겼습니다.
 - **“표준”과 “HDR Tone” 항목이 각각 두 개.** 흑백 표준과 HDR 룩은 컬러 룩과 같은 이름과
   아이콘을 사용합니다.
 - **RICOH 공식 업데이트를 설치하면 룩이 사라집니다.** 펌웨어 전체를 교체하기 때문입니다.
-- **표준 GR IV 전용입니다.** 다른 모델에는 절대 이 파일을 설치하지 마세요.
+- **GR IV와 GR IV HDF 전용입니다.** 다른 모델에는 절대 이 파일을 설치하지 마세요.
+  GR IV Monochrome에도 절대 설치하지 마세요.
+- **GR IV HDF에서 2.2.0 이전 버전으로 만든 파일:** 룩은 들어 있지만, 슬라이더가 0이 아니라 그 슬롯에 대한
+  RICOH의 설정으로 시작합니다. 같은 `look.json`을 2.2.0 이상으로 다시 빌드하세요. 어느 파일이 다시 빌드해야
+  하는지는 `check`가 알려 줍니다. GR IV에서는 문제없습니다.
 - **카메라를 수리에 보내기 전에** 공식 펌웨어로 되돌리세요.
 - **먼저 여러 LUT를 시험해 보세요:** `uv run gr4_lutsmith.py fit my_look.cube --photo R0001234.DNG`는
   펌웨어 파일 없이 피팅하고 결과를 보고합니다.
@@ -688,11 +693,13 @@ uv run gr4_lutsmith.py selftest ~/Downloads/fwdc248b.bin
 | 슬라이더가 0으로 시작(그레인 꺼짐) | 테스트된 빌드와 같은 변경(그 일부)으로 구성됨. 이것만 단독으로는 아직 설치해 보지 않음 |
 | 톤 커브가 2개 또는 3개 필요한 룩(색 캐스트, 토닝 룩) | 커브 3개를 GR IV 1.11에서 테스트함 |
 | 색상별 보정 | GR IV 1.11의 RAW Development에서 필름 시뮬레이션 LUT로 테스트함(ISO 200, 녹색과 노랑이 많은 주광 장면): 카메라가 도구의 예측과 일치했고, 색이 있는 부분에서 LUT와의 차이가 약 30 % 줄었으며, 색 사이의 틈은 보이지 않았음. 빨강, 파랑, 보라와 더 높은 ISO는 아직 카메라에서 확인하지 않음 |
-| 커브 이후 색 보정(`--after-curves`, 선택 사항) | 
+| 커브 이후 색 보정(`--after-curves`, 선택 사항) | GR IV 1.11에서 테스트함: 작동함. 시도 한 번에 시간이 더 걸림. LUT와의 평균 차이는 더 작지만, 같은 시간이면 일반 피팅의 시도 횟수를 늘리는 쪽이 더 큰 효과를 냄([어느 쪽이 더 도움이 되나](#어느-쪽이-더-도움이-되나) 참고) |
 | Cinema (Yellow) / Cinema (Green) 슬롯의 룩 | GR IV 1.11에서 테스트함: 작동함 |
 | 다른 슬롯의 룩(Vivid, Positive Film, Negative Film, Bleach Bypass, Retro, 흑백 슬롯) | GR IV 1.11에서 테스트함: 작동함 |
 | 슬롯의 자체 이름(`--name`) | GR IV 1.11에서 테스트함: 작동함 |
 | 슬롯의 자체 아이콘(`--icon`) | GR IV 1.11에서 테스트함: 작동함 |
+| GR IV HDF에서: 같은 룩, 슬라이더도 마찬가지로 0(2.2.0) | GR IV HDF 1.11에서 테스트함: 작동함 |
+| GR IV에서의 2.2.0 파일 | 오프라인으로 확인함: 추가된 것은 GR IV HDF 자체의 슬라이더 설정뿐이며, GR IV는 2.1.1에서와 정확히 같은 내용을 읽음. 아직 설치해 보지 않음 |
 | 공유받은 `look.json`으로 빌드 | 오프라인으로 확인함: 같은 LUT 결과, 슬롯, 이름, 아이콘으로 `make`한 것과 펌웨어가 바이트 단위로 동일함. 카메라에 새로 들어가는 것은 없음 |
 | 앱(`GR4-LUTSmith`)이 명령줄과 같은 펌웨어를 빌드함 | 오프라인으로 확인함: 같은 LUT, 사진, 선택이면 바이트 단위로 동일함 |
 | 시도 동시 실행(`--jobs`, 앱의 “동시 실행”) | 오프라인으로 확인함: 같은 시도를 차례로 실행한 것과 결과가 바이트 단위로 동일함 |
@@ -721,5 +728,5 @@ GR4-LUTSmith/
 
 | 파일 | SHA-256 |
 | --- | --- |
-| RICOH GR IV 공식 1.11 `fwdc248b.bin` | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
-| 예제 펌웨어(`selftest`, `examples/film-1d.look.json`에서 생성) | `d201add28bc3ab738bc92fcfdaafa3847bc881bfd7eecb6b7e8f331d1289f052` |
+| RICOH GR IV / GR IV HDF 공식 1.11 `fwdc248b.bin` | `a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f` |
+| 예제 펌웨어(`selftest`, `examples/film-1d.look.json`에서 생성) | `bb838b5426249f27da68b410223f6c24df36c4816abdaf156472a2a3b61d4441` |

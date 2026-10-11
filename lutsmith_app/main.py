@@ -92,7 +92,7 @@ class FirstRun(QDialog):
         self.lay.addWidget(label(t('Firmware downloaded from RICOH and firmware extracted from the camera are the same, '
                                    'and GR4-LUTSmith works with both.')))
         self.lay.addWidget(label(t("In line with RICOH's software distribution terms, please confirm that the firmware "
-                                   "you will use was extracted directly from your own RICOH GR IV, in its original "
+                                   "you will use was extracted directly from your own RICOH GR IV / GR IV HDF, in its original "
                                    "factory-shipped condition, with firmware version 1.11."), 'aside'))
         no = button(t('Cancel'), slot=self.show_declined); no.setObjectName('frNo')
         yes = button(t('Confirm'), 'primary', self.accept); yes.setObjectName('frYes')
@@ -188,7 +188,7 @@ class Window(QMainWindow):
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(20, 12, 20, 12); lay.setSpacing(12)
         brand = QLabel('GR4-LUTSmith'); brand.setObjectName('brand')
-        note = QLabel(t('for RICOH GR IV, firmware 1.11')); note.setObjectName('brandNote')
+        note = QLabel(t('for RICOH GR IV / GR IV HDF, firmware 1.11')); note.setObjectName('brandNote')
         lay.addWidget(brand); lay.addWidget(note, 0, Qt.AlignmentFlag.AlignBottom); lay.addStretch(1)
         lab = QLabel(t('App and camera language'))
         combo = QComboBox(); combo.setObjectName('language')
@@ -348,7 +348,7 @@ class Window(QMainWindow):
     def page_firmware(self):
         S = self.S
         parts = [self.head(t("Start from your camera's firmware"),
-                           t("Choose the file {file} that you extracted from your own GR IV, in its original "
+                           t("Choose the file {file} that you extracted from your own GR IV / GR IV HDF, in its original "
                              "factory-shipped condition with version 1.11. The app checks that it is RICOH's unmodified "
                              "1.11 and runs its self-test. Nothing is changed on your computer.",
                              file='<b>fwdc248b.bin</b>'), rich=True)]
@@ -361,7 +361,7 @@ class Window(QMainWindow):
         else:
             checking = S.fw_status == 'checking'
             card = filecard(glyph('BIN'), Path(S.fw_path).name,
-                            t('Checking…') if checking else t('RICOH GR IV 1.11, official; self-test passed'),
+                            t('Checking…') if checking else t('RICOH GR IV / GR IV HDF 1.11, official; self-test passed'),
                             pill(t('Checking'), 'info') if checking else pill(t('Verified'), 'good'))
             parts.append(box(card, label(t('The camera must already be on firmware 1.11. Charge the battery fully '
                                            'before you install anything.'), 'note'),
@@ -492,13 +492,13 @@ class Window(QMainWindow):
             dng_parts.append(filecard(glyph('DNG'), Path(S.dng).name, t('Half joins the fit, half stays aside to check it'),
                                       button(t('Remove'), 'small', self.forget_dng)))
         else:
-            dz = DropZone(t('Choose a DNG from your GR IV'), t('Everyday content works best: people, sky, foliage.'),
+            dz = DropZone(t('Choose a DNG from your GR IV / GR IV HDF'), t('Everyday content works best: people, sky, foliage.'),
                           'DNG (*.dng *.DNG)')
             dz.chosen.connect(self.choose_dng)
             dng_parts.append(dz)
         return self.page(
             self.head(t('Choose your LUT'), t('A creative {cube} LUT made for normal pictures (sRGB or Adobe RGB). Log LUTs '
-                                              'with gamma are not supported. A DNG from your GR IV is optional but helps: '
+                                              'with gamma are not supported. A DNG from your GR IV / GR IV HDF is optional but helps: '
                                               'the fit is then checked on real content.', cube='<b>.cube</b>'), rich=True),
             self.grid2(box(*lut_parts), box(*dng_parts)),
             self.nav(0, 2, t('Next: slot, name, icon'), bool(S.lut)))
@@ -1026,7 +1026,7 @@ class Window(QMainWindow):
         S = self.S
         if not S.dng:
             return box(label(t('Preview'), 'h3'),
-                       label(t('Add a DNG from your GR IV in step 2 to compare the look on your own photo.'), 'note'))
+                       label(t('Add a DNG from your GR IV / GR IV HDF in step 2 to compare the look on your own photo.'), 'note'))
         name = gl.result_name(rec)
         pair = getattr(self, 'compare_pair', 'lut')
         seg = Segmented([('lut', t('LUT vs camera')), ('neutral', t('Without vs with look'))], pair)
@@ -1222,7 +1222,7 @@ class Window(QMainWindow):
         if r:
             if not r['valid']:
                 kind, tag = 'bad', t('Damaged')
-                pairs = [(t('File'), t('not valid: the file is damaged or not a GR IV firmware'))]
+                pairs = [(t('File'), t('not valid: the file is damaged or not a GR IV / GR IV HDF firmware'))]
             elif r['kind'] == 'official':
                 kind, tag = 'good', t('Official RICOH 1.11')
                 pairs = [(t('File'), t('valid (sizes, footer, both checksums)')), (t('Status'), t('unmodified'))]
@@ -1240,7 +1240,12 @@ class Window(QMainWindow):
                     looks.append(text)
                 pairs = [(t('File'), t('valid (sizes, footer, both checksums)')),
                          (t('Looks'), '; '.join(looks) if looks else t('no personal look')),
-                         (t('Made from'), t('official RICOH GR IV 1.11'))]
+                         (t('Made from'), t('official RICOH GR IV / GR IV HDF 1.11'))]
+                old = [i18n.slot_name(lk['slot']) for lk in r['looks'] if not lk['hdf']]
+                if old:
+                    pairs.append((t('Status'), t("Made before 2.2.0: on a GR IV HDF these looks open with RICOH's slider "
+                                                 "settings instead of 0: {slots}. Build them again for an HDF.",
+                                                 slots=', '.join(old))))
             else:
                 kind, tag = 'warn', t('Unknown')
                 pairs = [(t('File'), t('valid (sizes, footer, both checksums)')),

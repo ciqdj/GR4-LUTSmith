@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'lutsmith_app'
 sys.path.insert(0, str(ROOT))
-KEEP = ['ΔE00', 'LUT', 'DNG', 'sRGB', 'Adobe RGB', 'ColorChecker', 'SHA-256', 'GR4-LUTSmith', 'RICOH', 'GR IV', '1.11',
+KEEP = ['ΔE00', 'LUT', 'DNG', 'sRGB', 'Adobe RGB', 'ColorChecker', 'SHA-256', 'GR4-LUTSmith', 'RICOH', 'GR IV', 'HDF', '1.11',
         '.cube', '.json', 'look.json', 'p95']
 
 
