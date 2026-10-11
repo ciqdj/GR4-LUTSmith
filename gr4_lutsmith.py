@@ -31,7 +31,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '2.0.0'
+VERSION = '2.0.1'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776

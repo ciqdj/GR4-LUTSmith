@@ -92,9 +92,44 @@ for lang in i18n.LANGS:
             w.go(step); app.processEvents()
         w.show_check(); app.processEvents()
 check('every page draws in 21 languages, day and night', not errors, str(errors[:1]))
+sys.excepthook = sys.__excepthook__
 check('no test or preview controls in the app', not any(
     s in (ROOT / 'lutsmith_app' / f).read_text(encoding='utf-8') for f in ('main.py', 'widgets.py', 'logic.py')
     for s in ('Reopen confirmation', 'Use a sample', 'Try a damaged file', 'in this preview')))
+
+# the fit started with real clicks, as a user starts it (short fits; no RICOH file needed)
+import time  # noqa: E402
+from PySide6.QtWidgets import QPushButton  # noqa: E402
+_fit_args = logic.fit_args
+logic.fit_args = lambda *a: (lambda ns: (setattr(ns, 'iters', 40), ns)[1])(_fit_args(*a))
+w = M.Window(); w.show()
+w.set_language('English')
+w.S.fw_status, w.S.fw_data, w.S.fw_path = 'ok', b'', 'fwdc248b.bin'   # the firmware step is not needed for fitting
+w.choose_lut(str(ROOT / 'examples' / 'film-1d.cube')); w.set_slot('vivid'); w.go(3); app.processEvents()
+
+
+def click(text):
+    hits = [b for b in w.findChildren(QPushButton) if b.text() == text and b.isVisible() and b.isEnabled()]
+    if hits:
+        hits[0].click()
+    return bool(hits)
+
+
+def settle(limit=300):
+    t0 = time.time()
+    while (w.S.fitting or w.tasks) and time.time() - t0 < limit:
+        app.processEvents(); time.sleep(0.02)
+    app.processEvents()
+
+
+started = click('Start fit')
+app.processEvents()
+check('clicking Start fit starts a fit', started and (w.S.fitting or bool(w.tasks)), f'fitting={w.S.fitting} tasks={len(w.tasks)}')
+settle()
+check('the fit finishes and shows its result', not w.S.fitting and bool(w.S.fit and w.S.fit['kept']), str(w.S.fit and len(w.S.fit['kept'])))
+click('Run 1 more turn'); app.processEvents(); settle()
+check('Run 1 more turn adds a turn', bool(w.S.fit) and len(w.S.fit['history_turns']) == 2, str(w.S.fit and w.S.fit['history_turns']))
+logic.fit_args = _fit_args
 
 fw = os.environ.get('GR4_FIRMWARE')
 if fw:

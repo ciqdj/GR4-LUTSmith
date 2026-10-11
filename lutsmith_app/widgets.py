@@ -43,7 +43,7 @@ def button(text, role=None, slot=None, enabled=True):
     if role:
         set_role(b, role)
     if slot:
-        b.clicked.connect(slot)
+        b.clicked.connect(lambda _checked=False: slot())   # never pass Qt's 'checked' value on
     b.setEnabled(enabled)
     return b
 

@@ -726,11 +726,21 @@ class Window(QMainWindow):
         page.append(self.nav(2, 4, t('Next: build'), bool(rec) and not S.fitting and rec['decision']['build']))
         return self.page(*page)
 
-    def start_fit(self, more=None, post=None):
+    def start_fit(self, *, more=None, post=None):
+        """A new fit (more=None) or more turns of the current one; never leaves the page stuck in 'fitting'."""
+        try:
+            self._start_fit(more, post)
+        except Exception as exc:
+            self.S.fitting = False
+            gl.STOP = None
+            self.render()
+            self.say(t('Something went wrong: {error}', error=f'{type(exc).__name__}: {exc}'))
+
+    def _start_fit(self, more, post):
         S = self.S
-        if more is None:
+        if more is None or S.fit is None:
             S.fit, S.selected, S.photo_cam = logic.new_fit_state(), None, {}
-            n, post = S.turns, S.after
+            n, post = (S.turns, S.after) if more is None else (more, post)
         else:
             n = more
         S.fitting, S.fit_log, S.built = True, [], None
@@ -798,9 +808,9 @@ class Window(QMainWindow):
             hint = t('Ready to build.')
         head = row(label(t('Results'), 'h3'), pill(t(verdict), {'good': 'good', 'approximate': 'warn'}.get(verdict, 'bad')),
                    label(hint, 'hint'), stretch_end=True)
-        head.layout().addWidget(button(t('Run 1 more turn'), 'small', lambda: self.start_fit(1, False), not S.fitting))
+        head.layout().addWidget(button(t('Run 1 more turn'), 'small', lambda: self.start_fit(more=1, post=False), not S.fitting))
         head.layout().addWidget(button(t('1 more with colour after the curves'), 'small',
-                                       lambda: self.start_fit(1, True), not S.fitting))
+                                       lambda: self.start_fit(more=1, post=True), not S.fitting))
         cols = [t('Result'), t('Whole range'), 'ColorChecker', t('Greys'), t('Photo'), t('Fit score')]
         table = QTableWidget(len(rows), len(cols))
         table.setHorizontalHeaderLabels(cols)
