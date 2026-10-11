@@ -162,22 +162,62 @@ def new_fit_state():
     return dict(kept=[], history=[], history_turns=[], icon=None, name_accepted=False)
 
 
-def run_turns(args, n, state, post, log):
-    gl.run_turns(args, n, state, post, log=log)
+class Batch(gl.Batch):
+    """The engine's turns side by side. The helper thread only says when turns are ready; the window records them
+    on its own thread (record()), so the results it shows never change under it."""
+    notify = None
+
+    def ready(self):
+        if self.notify and self.next_record in self.finished:
+            self.notify()
+
+
+def cores():
+    import os
+    return os.cpu_count() or 2
+
+
+def most_at_once():
+    """Turns that can run side by side: one core stays free for the window and the rest of the computer."""
+    return max(1, cores() - 1)
 
 
 STAGES = {'single': 'single tone curve', 'rg-b': 'two tone curves (R+G / B)', 'r-gb': 'two tone curves (R / G+B)',
           'rb-g': 'two tone curves (R+B / G)', 'rgb': 'three tone curves', 'hue': 'hue sectors'}
+LANE = ['single', 'rg-b', 'r-gb', 'rb-g', 'rgb', 'hue', 'after']        # a turn's stages, in the order they run
+TURN_MINUTES = 3.5                       # about this long per turn on one core, before any turn has finished
+AFTER_FACTOR = 1.6                       # a turn with colour after the curves takes about this much longer
 
 
-def progress_line(line, turn):
-    """The engine's progress line in the user's words ('Turn 2: three tone curves, ΔE00 1.23'), or None."""
+def lane_steps(post):
+    return len(LANE) - (0 if post else 1)
+
+
+def stage_done(line):
+    """How many of a turn's stages are done when the engine logs this line, or None."""
     import re
-    m = re.match(r'\s*(single|rg-b|r-gb|rb-g|rgb|hue)\s+(\+ after.*?)?ΔE00 ([0-9.]+)', line)
+    m = re.match(r'\s*(single|rg-b|r-gb|rb-g|rgb|hue)\s+(\+ after.*?)?ΔE00 ', str(line))
     if not m:
         return None
-    stage = t('colour after the curves') if m.group(2) else t(STAGES[m.group(1)])
-    return t('Turn {n}: {stage}', n=turn, stage=stage) + f', ΔE00 {i18n.num(float(m.group(3)))}'
+    return LANE.index('after') if m.group(2) else max(1, min(LANE.index(m.group(1)) + 1, LANE.index('hue')))
+
+
+def stage_label(done):
+    return t('colour after the curves') if LANE[done] == 'after' else t(STAGES[LANE[done]])
+
+
+def minutes_left(lanes, jobs, now):
+    """About how many minutes until every waiting and running turn is done, with turns started as cores free up.
+    Uses the time finished turns took, or a first guess."""
+    took = [l['ended'] - l['started'] for l in lanes if l['state'] == 'done' and l.get('ended')]
+    per = lambda l: ((sum(took) / len(took) / 60) if took else TURN_MINUTES) * (AFTER_FACTOR if l['post'] and not took else 1)
+    free = sorted(max(per(l) * 0.1, per(l) - (now - l['started']) / 60) for l in lanes if l['state'] == 'running')
+    free = (free + [0.0] * jobs)[:max(jobs, len(free))]
+    for l in lanes:
+        if l['state'] == 'waiting':
+            free.sort()
+            free[0] += per(l)
+    return max(free) if free else 0.0
 
 
 def result_rows(state):

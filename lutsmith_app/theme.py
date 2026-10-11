@@ -95,6 +95,9 @@ QLabel[role="lede"] {{ color: {k['muted']}; }}
 QLabel[role="hint"] {{ color: {k['muted']}; font-size: 13px; }}
 QLabel[role="note"] {{ color: {k['muted']}; font-size: 14px; }}
 QLabel[role="field"] {{ font-weight: 600; font-size: 14px; }}
+QLabel[role="laneTitle"] {{ font-weight: 500; }}
+QLabel[role="laneStatus"] {{ font-size: 14px; }}
+QLabel[role="laneTitle"][dim="true"], QLabel[role="laneStatus"][dim="true"] {{ color: {k['muted']}; }}
 QLabel[role="msg-bad"] {{ color: {k['bad']}; font-size: 14px; }}
 QLabel[role="msg-warn"] {{ color: {k['warn']}; font-size: 14px; }}
 QLabel[role="msg-good"] {{ color: {k['good']}; font-size: 14px; }}

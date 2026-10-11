@@ -31,7 +31,7 @@ import sys
 import zlib
 from pathlib import Path
 
-VERSION = '2.0.2'
+VERSION = '2.1.0'
 
 OFFICIAL_SHA256 = 'a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f'
 OFFICIAL_BYTES = 38648776
@@ -2419,41 +2419,188 @@ def show_kept(kept, log=print):
             '  the best fit score. Preview them on your own photo and pick the one you like.')
 
 
-def run_turns(a, n, state, post, log=print):
-    """Run n more turns (post: with colour after the curves) and update state (kept list, history, seeds)."""
+def turn_seed(a, k):
+    """Turn k's start: the classic one for turn 1, else a random seed (or --seed, counted on per turn)."""
     import secrets
+    if a.seed is not None:
+        return a.seed + k - 1
+    return None if k == 1 else secrets.randbelow(2 ** 31)
+
+
+def turn_header(k, seed, post):
+    return (f'\nturn {k} ({"classic start" if seed is None else f"random start, seed {seed}"}'
+            + (', with colour after the curves)' if post else ')'))
+
+
+def record_turn(a, state, k, seed, post, res, log=print):
+    """Add one finished turn to the state (kept list, history, seeds). Turns are recorded in turn order."""
+    alt = res.pop('after_curves', None)
+    state['history_turns'].append(dict(seed=seed, after_curves=post))
+    for rec in (res, alt):
+        if rec is None:
+            continue
+        for x in ('recommended', 'compared'):
+            rec.pop(x, None)
+        rec['turn'] = k
+        rec['slot'] = a.slot
+        if a.name:
+            rec['name'] = a.name
+            rec['camera_language'] = a.camera_language
+            if state.get('name_accepted'):
+                rec['name_accepted'] = True
+        if state.get('icon'):
+            rec['icon'] = state['icon']
+        state['kept'], joined, left = keep(state['kept'], rec)
+        state['history'].append(dict(result=result_name(rec), seed=seed, kept_when_found=joined,
+                                     fit_score=rec['scores']['fit_score'], **measures(rec)))
+        log(f'  {result_name(rec)}: ' + ('kept' if joined else 'not kept (an earlier result is at least as good '
+                                                               'on every measure)'))
+        for x in left:
+            log(f'  {result_name(x)} leaves the list ({result_name(rec)} is better on every measure)')
+
+
+def run_turns(a, n, state, post, log=print):
+    """Run n more turns one after another (post: with colour after the curves) and update state (kept list,
+    history, seeds)."""
     for _ in range(n):
         k = len(state['history_turns']) + 1
-        if a.seed is not None:
-            seed = a.seed + k - 1
-        else:
-            seed = None if k == 1 else secrets.randbelow(2 ** 31)
-        log(f'\nturn {k} ({"classic start" if seed is None else f"random start, seed {seed}"}'
-            + (', with colour after the curves)' if post else ')'))
+        seed = turn_seed(a, k)
+        log(turn_header(k, seed, post))
         res = fit_lut(a.lut, a.space, a.curve, a.photo, a.iters, log=log, hue=not a.no_hue, post=post, seed=seed)
-        alt = res.pop('after_curves', None)
-        state['history_turns'].append(dict(seed=seed, after_curves=post))
-        for rec in (res, alt):
-            if rec is None:
-                continue
-            for x in ('recommended', 'compared'):
-                rec.pop(x, None)
-            rec['turn'] = k
-            rec['slot'] = a.slot
-            if a.name:
-                rec['name'] = a.name
-                rec['camera_language'] = a.camera_language
-                if state.get('name_accepted'):
-                    rec['name_accepted'] = True
-            if state.get('icon'):
-                rec['icon'] = state['icon']
-            state['kept'], joined, left = keep(state['kept'], rec)
-            state['history'].append(dict(result=result_name(rec), seed=seed, kept_when_found=joined,
-                                         fit_score=rec['scores']['fit_score'], **measures(rec)))
-            log(f'  {result_name(rec)}: ' + ('kept' if joined else 'not kept (an earlier result is at least as good '
-                                                                   'on every measure)'))
-            for x in left:
-                log(f'  {result_name(x)} leaves the list ({result_name(rec)} is better on every measure)')
+        record_turn(a, state, k, seed, post, res, log)
+
+
+# ------------------------------------------------------------------ turns side by side
+JOB_THREADS = ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS', 'MKL_NUM_THREADS')
+_JOB = {}
+
+
+def _job_init(queue, stop):
+    """In a helper process: report progress to the batch, and stop when it says so."""
+    global STOP
+    _JOB.update(queue=queue)
+    STOP = stop.is_set
+
+
+def _run_job(job):
+    """One turn in a helper process; progress lines go to the batch as (turn, line), None when the turn starts."""
+    queue, k, lines = _JOB.get('queue'), job['turn'], []
+
+    def log(line):
+        lines.append(line)
+        if queue is not None:
+            queue.put((k, line))
+    if queue is not None:
+        queue.put((k, None))
+    res = fit_lut(job['lut'], job['space'], job['curve'], job['photo'], job['iters'], log=log, hue=job['hue'],
+                  post=job['post'], seed=job['seed'])
+    return dict(job, result=res, lines=lines)
+
+
+class Batch:
+    """Turns of one fit run side by side, each in a helper process using one core. Every turn gets its number and
+    start when it is added, and turns are recorded in turn order, so the outcome is the same as running them one
+    after another. More turns can be added while it runs; stop() ends it (finished turns stay)."""
+
+    def __init__(self, a, state, jobs, log=print):
+        import threading
+        self.a, self.state, self.jobs, self.log = a, state, max(1, int(jobs)), log
+        self.lock = threading.Lock()
+        self.pending, self.finished = [], {}
+        self.next_turn = self.next_record = len(state['history_turns']) + 1
+        self.stopping = False
+
+    def add(self, n, post):
+        """Queue n turns; returns [(turn, seed)] (seed None: the classic start)."""
+        a, out = self.a, []
+        with self.lock:
+            for _ in range(n):
+                k = self.next_turn
+                self.next_turn += 1
+                self.pending.append(dict(turn=k, seed=turn_seed(a, k), post=bool(post), lut=str(a.lut), space=a.space,
+                                         curve=a.curve, photo=str(a.photo) if a.photo else None, iters=a.iters,
+                                         hue=not a.no_hue))
+                out.append((k, self.pending[-1]['seed']))
+        return out
+
+    def stop(self):
+        self.stopping = True
+
+    def run(self, progress=None):
+        """Run every turn added (also those added meanwhile). progress(turn, line) receives each turn's progress
+        (line None when it starts). Returns when every turn is recorded, or after stop()."""
+        import concurrent.futures as cf
+        import multiprocessing as mp
+        import os
+        import queue as queues
+        import time
+        ctx = mp.get_context('spawn')
+        q, stopper = ctx.Queue(), ctx.Event()
+        saved = {v: os.environ.get(v) for v in JOB_THREADS}
+        os.environ.update({v: '1' for v in JOB_THREADS})           # one core per turn
+        running = {}
+
+        def drain():
+            while True:
+                try:
+                    k, line = q.get_nowait()
+                except queues.Empty:
+                    return
+                if progress:
+                    progress(k, line)
+        try:
+            with cf.ProcessPoolExecutor(self.jobs, mp_context=ctx, initializer=_job_init,
+                                        initargs=(q, stopper)) as ex:
+                while True:
+                    with self.lock:
+                        if self.stopping:
+                            stopper.set()
+                            for job in self.pending:
+                                self.finished[job['turn']] = dict(job, result=None)
+                            self.pending.clear()
+                        while self.pending and len(running) < self.jobs:
+                            job = self.pending.pop(0)
+                            running[ex.submit(_run_job, job)] = job
+                    drain()
+                    for f in [f for f in running if f.done()]:
+                        job = running.pop(f)
+                        try:
+                            self.finished[job['turn']] = f.result()
+                        except Stopped:
+                            self.finished[job['turn']] = dict(job, result=None)
+                    self.ready()
+                    with self.lock:
+                        if not running and not self.pending:
+                            break
+                    time.sleep(0.05)
+                drain()
+        finally:
+            for v, old in saved.items():
+                if old is None:
+                    os.environ.pop(v, None)
+                else:
+                    os.environ[v] = old
+
+    def ready(self):
+        """Turns have finished. Records them here; a window records them on its own thread instead."""
+        self.record()
+
+    def record(self):
+        """Record finished turns in turn order (a stopped turn keeps its number, with no result). Returns the
+        turns recorded."""
+        done = []
+        while self.next_record in self.finished:
+            r = self.finished.pop(self.next_record)
+            if r['result'] is None:
+                self.state['history_turns'].append(dict(seed=r['seed'], after_curves=r['post'], stopped=True))
+            else:
+                self.log(turn_header(r['turn'], r['seed'], r['post']))
+                for line in r['lines']:
+                    self.log(line)
+                record_turn(self.a, self.state, r['turn'], r['seed'], r['post'], r['result'], self.log)
+            done.append(r['turn'])
+            self.next_record += 1
+        return done
 
 
 def ask_more_turns(post):
@@ -2615,6 +2762,8 @@ def main(argv=None):
         p.add_argument('--turns', type=int, default=1,
                        help='how many fits to run; each extra turn starts from a new random point (default 1)')
         p.add_argument('--seed', type=int, help='run turns from this seed (repeats a turn shown earlier)')
+        p.add_argument('--jobs', type=int, default=1,
+                       help='run this many turns side by side, one processor core each (default 1)')
         p.add_argument('--after-curves', action='store_true',
                        help='also try a colour mix after the tone curves; keeps a second version when it helps')
         p.add_argument('--iters', type=int, default=1500, help=argparse.SUPPRESS)
@@ -2699,7 +2848,12 @@ def main(argv=None):
             state = dict(kept=[], history=[], history_turns=[], icon=icon, name_accepted=name_accepted)
             n, post = a.turns, a.after_curves
             while n:
-                run_turns(a, n, state, post)
+                if a.jobs > 1 and n > 1:
+                    batch = Batch(a, state, min(a.jobs, n))
+                    batch.add(n, post)
+                    batch.run(progress=lambda k, line: line is None and print(f'turn {k} started'))
+                else:
+                    run_turns(a, n, state, post)
                 show_kept(state['kept'])
                 n, post = ask_more_turns(a.after_curves)
             kept, best = state['kept'], recommended(state['kept'])

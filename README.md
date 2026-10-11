@@ -110,7 +110,7 @@ repository, the build and the exact version of the code. You can check that your
 not changed or replaced, with the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`):
 
 ```sh
-gh attestation verify GR4-LUTSmith-2.0.2-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
+gh attestation verify GR4-LUTSmith-2.1.0-macOS-AppleSilicon.zip --repo lemonadesaltbagel/GR4-LUTSmith
 ```
 
 (use the name of the zip you downloaded; on Windows, run it in PowerShell from your Downloads folder). It ends with
@@ -163,6 +163,9 @@ follow [Copy it to the SD card](#4-copy-it-to-the-sd-card) and [Update the camer
 - **Check a firmware file** (left side) tells you whether a `fwdc248b.bin` is RICOH's official file, made by
   GR4-LUTSmith (and with which looks), or something else.
 - Looks someone shared (`.json`) work in the app too: choose "A shared look" on the first page.
+- **Several turns at once:** on the Fit page, choose how many turns and how many run at once (one processor core
+  each; see [More turns](#more-turns)). Each turn shows how far it is; you can add turns while they run, and
+  "Stop all" keeps the turns that have finished. Results join the table as turns finish.
 
 ### If something goes wrong
 
@@ -218,6 +221,8 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
 - `--icon my_icon.png` (optional) gives the slot your own menu icon: see
   [Your own icon](#your-own-icon).
 - `--turns 3` (optional) runs three fits and keeps the best ones: see
+  [More turns](#more-turns).
+- `--jobs 3` (optional) runs up to three of those turns side by side: see
   [More turns](#more-turns).
 - `--after-curves` is optional: see [Colour after the curves](#colour-after-the-curves).
 
@@ -354,6 +359,10 @@ uv run gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R00012
 - Turn 1 always uses the usual starting point, so one turn (the default) gives
   the same result as before. Every further turn draws a new random start.
 - Each turn takes as long as a normal fit (a few minutes).
+- **Side by side.** `--jobs 3` runs up to three turns at once, each on one
+  processor core and with about 0.8 GB of memory. Leave at least one core free
+  for the rest of the computer. The results are exactly the same as running the
+  turns one after another; they are only ready sooner.
 - **Kept results.** A new result is kept unless an earlier one is at least as
   good on every measure (the whole range, the ColorChecker, the greys and your
   photo). An earlier result that the new one beats on every measure leaves the
@@ -623,6 +632,7 @@ python3 gr4_lutsmith.py make my_look.cube ~/Downloads/fwdc248b.bin --photo R0001
 | Your own icon for the slot (`--icon`) | tested on a GR IV 1.11: works |
 | Building from a shared `look.json` | checked offline: the firmware is byte-identical to `make` with the same LUT result, slot, name and icon; nothing new reaches the camera |
 | The app (`GR4-LUTSmith`) builds the same firmware as the command line | checked offline: byte-identical for the same LUT, photo and choices |
+| Turns side by side (`--jobs`, the app's "Run at once") | checked offline: the same results, byte for byte, as the same turns one after another |
 | The tool reproduces the tested example exactly | tested (`selftest`) |
 
 ## Files

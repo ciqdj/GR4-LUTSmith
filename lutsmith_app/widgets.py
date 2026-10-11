@@ -482,6 +482,84 @@ class Compare(QWidget):
             p.drawRoundedRect(r.adjusted(1, 1, -1, -1), 8, 8)
 
 
+class Track(QWidget):
+    """A turn's stages as a row of marks: done, the one running now, still to come."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.steps, self.done, self.running = 6, 0, False
+        self.setFixedHeight(10)
+        self.setMinimumWidth(120)
+
+    def set(self, steps, done, running):
+        self.steps, self.done, self.running = steps, done, running
+        self.update()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        gap, n = 3.0, max(1, self.steps)
+        w = (self.width() - gap * (n - 1)) / n
+        for i in range(n):
+            c = tok('rule')
+            if i < self.done:
+                c = tok('accent')
+            elif i == self.done and self.running:
+                c = tok('accent'); c.setAlphaF(0.45)
+            p.setBrush(c)
+            p.drawRoundedRect(QRectF(i * (w + gap), 0, w, self.height()), 3, 3)
+
+
+class LaneRow(QWidget):
+    """One turn of a fit: its name and start, its stages, and how it is doing."""
+
+    def __init__(self, lane, parent=None):
+        super().__init__(parent)
+        self.running = False
+        g = QGridLayout(self)
+        g.setContentsMargins(10, 8, 10, 8)
+        g.setHorizontalSpacing(24)
+        g.setVerticalSpacing(0)
+        self.title, self.start = label('', 'laneTitle', wrap=False), label('', 'hint', wrap=False)
+        self.track = Track()
+        self.status = label('', 'laneStatus', wrap=False)
+        self.status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        g.addWidget(self.title, 0, 0)
+        g.addWidget(self.start, 1, 0)
+        g.addWidget(self.track, 0, 1, 2, 1, Qt.AlignmentFlag.AlignVCenter)
+        g.addWidget(self.status, 0, 2, 2, 1)
+        g.setColumnMinimumWidth(0, 230)
+        g.setColumnMinimumWidth(2, 200)
+        g.setColumnStretch(1, 1)
+        self.show_lane(lane, '')
+
+    def show_lane(self, lane, status):
+        from .logic import lane_steps
+        k = lane['turn']
+        self.title.setText(t('Turn {n} with colour after the curves', n=k) if lane['post'] else t('Turn {n}', n=k))
+        self.start.setText(t('usual start') if lane['seed'] is None else t('random start, seed {seed}', seed=lane['seed']))
+        self.status.setText(status)
+        dim = lane['state'] in ('waiting', 'stopped')
+        set_role(self.title, 'laneTitle', dim=dim)
+        set_role(self.status, 'laneStatus', dim=dim)
+        self.track.set(lane_steps(lane['post']), lane['done'], lane['state'] == 'running')
+        self.running = lane['state'] == 'running'
+        self.setAccessibleName(f'{self.title.text()}: {status}')
+        self.update()
+
+    def paintEvent(self, _):
+        if not self.running:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        c = tok('accent')
+        c.setAlphaF(0.07 if theme.TOKENS is theme.DAY else 0.12)
+        p.setBrush(c)
+        p.drawRoundedRect(QRectF(self.rect()), 8, 8)
+
+
 class Toast(QLabel):
     """A short message at the bottom of the window."""
 

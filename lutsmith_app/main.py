@@ -1,7 +1,9 @@
 """The GR4-LUTSmith window: a top bar with the window-wide settings, the steps on the left, the current step's page."""
 import base64
 import json
+import math
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer
@@ -13,8 +15,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFil
 import gr4_lutsmith as gl
 
 from . import i18n, logic, theme
-from .i18n import t
-from .widgets import (Board, Compare, DropZone, IconTile, Meter, Segmented, SlotButton, StepButton, Toast, add, box,
+from .i18n import integer, t
+from .widgets import (Board, Compare, DropZone, IconTile, LaneRow, Meter, Segmented, SlotButton, StepButton, Toast, add, box,
                       button, facts, filecard, glyph, label, pill, qimage_from_pil, qimage_from_rgb, row, set_role)
 from .workers import Task
 
@@ -35,6 +37,7 @@ class State:
         self.space = 'srgb'
         self.dng = None
         self.reset_look()
+        self.at_once = 3                             # turns side by side
         self.basket = []                             # finished looks: dict(look=…, lut=…, shared=bool)
         self.built = None                            # (bytes, sha)
         self.check_file = self.check_result = None
@@ -42,11 +45,11 @@ class State:
     def reset_look(self):
         self.slot, self.name, self.name_accepted = None, '', False
         self.icon_path, self.icon_image, self.keep_shared_icon = None, None, True
-        self.turns, self.after = 1, False
+        self.turns, self.after = 3, False
         self.fit = None                              # the fit's state (kept results, history)
         self.selected = None
         self.fitting = False
-        self.fit_log = []
+        self.lanes = []                              # the turns of this fit: waiting, running, done or stopped
         self.photo = None                            # cached photo images (without the look, the LUT)
         self.photo_cam = {}                          # result name -> camera image
 
@@ -124,6 +127,11 @@ class Window(QMainWindow):
         self.settings = QSettings()                    # the app's own (set in main(); tests use a separate place)
         self.S = State()
         self.tasks = []
+        self.batch = None                              # the turns running now
+        try:
+            self.S.at_once = int(self.settings.value('at_once') or 3)
+        except (TypeError, ValueError):
+            pass
         i18n.set_language(self.settings.value('language') or i18n.system_language())
         self.theme_choice = self.settings.value('theme') or 'system'
         self.setWindowTitle(f'GR4-LUTSmith {gl.VERSION}')
@@ -413,7 +421,7 @@ class Window(QMainWindow):
         S.source, S.built, S.shared_error = source, None, None
         if source == 'lut' and S.shared:
             S.shared = None
-            S.reset_look()
+            self.reset_look()
         self.render()
 
     def choose_shared(self, path):
@@ -425,7 +433,7 @@ class Window(QMainWindow):
             self.render()
             return
         S.shared, S.shared_error, S.lut, S.built = sh, None, None, None
-        S.reset_look()
+        self.reset_look()
         S.slot = sh['slot'] if not any(b['look']['slot'] == sh['slot'] for b in S.basket) else None
         S.name = sh['name']
         self.render()
@@ -460,7 +468,7 @@ class Window(QMainWindow):
 
     def forget_shared(self):
         self.S.shared = None
-        self.S.reset_look()
+        self.reset_look()
         self.render()
 
     # ------------------------------------------------------------ 2 LUT and photo
@@ -524,9 +532,14 @@ class Window(QMainWindow):
         self.clear_fit()
         self.render()
 
+    def reset_look(self):
+        self.drop_batch()
+        self.S.reset_look()
+
     def clear_fit(self):
+        self.drop_batch()
         S = self.S
-        S.fit, S.selected, S.photo, S.photo_cam, S.fit_log, S.built = None, None, None, {}, [], None
+        S.fit, S.selected, S.photo, S.photo_cam, S.lanes, S.built = None, None, None, {}, [], None
 
     # ------------------------------------------------------------ 3 slot, name, icon
     def own_icon(self):
@@ -697,103 +710,250 @@ class Window(QMainWindow):
     def page_fit(self):
         S = self.S
         title = t('Fit {lut}', lut=S.lut['file'].rsplit('.', 1)[0]) if S.lut else t('Fit your LUT')
-        turns = QSpinBox(); turns.setRange(1, 9); turns.setValue(S.turns); turns.setFixedWidth(80)
-        turns.valueChanged.connect(lambda v: setattr(S, 'turns', v))
-        after = QCheckBox(t('Also try colour after the curves')); after.setChecked(S.after)
-        after.toggled.connect(lambda on: setattr(S, 'after', on))
-        go = button(t('Fit again') if S.fit else t('Start fit'), 'primary', self.start_fit, not S.fitting and bool(S.lut))
-        stop = button(t('Stop'), slot=self.stop_fit); stop.setVisible(S.fitting)
-        turns_label = label(t('Turns'), 'field'); turns_label.setBuddy(turns)
-        controls = row(turns_label, turns, 16, after, stretch_end=True)
-        controls.layout().addWidget(go); controls.layout().addWidget(stop)
-        parts = [controls, label(t('Each turn starts from a new point and takes a few minutes. Turn 1 always uses the '
-                                   'usual start, so one turn gives the same result every time.'), 'hint')]
-        if S.fitting or S.fit_log:
-            bar = QProgressBar(); bar.setTextVisible(False)
-            if S.fitting:
-                bar.setRange(0, 0)
-            else:
-                bar.setRange(0, 1); bar.setValue(1)
-            log = label('\n'.join(S.fit_log[-6:]), 'hint')
-            self.fit_progress = log
-            parts += [bar, log]
+        busy = S.fitting
+        most = logic.most_at_once()
+        S.at_once = max(1, min(S.at_once, most))
+        turns = QSpinBox(); turns.setRange(1, 12); turns.setValue(S.turns); turns.setFixedWidth(80); turns.setEnabled(not busy)
+        turns_label = label(t('Turns'), 'field', wrap=False); turns_label.setBuddy(turns)
+        at_once = Segmented([(str(n), integer(n)) for n in range(1, min(most, 8) + 1)], str(S.at_once))
+        at_once.setEnabled(not busy)
+        after = QCheckBox(t('Also try colour after the curves')); after.setChecked(S.after); after.setEnabled(not busy)
+        go = button('', 'primary', self.start_fit, bool(S.lut)); go.setVisible(not busy)
+        stop = button(t('Stop all'), slot=self.stop_fit); stop.setVisible(busy)
+        hint = label('', 'hint')
+
+        def update():
+            go.setText(t('Start 1 turn') if S.turns == 1 else t('Start {n} turns', n=integer(S.turns)))
+            text = t('Each turn uses one processor core. This Mac has {cores} cores, so up to {most} turns can run side by '
+                     'side; each needs about 0.8 GB of memory.' if sys.platform == 'darwin' else
+                     'Each turn uses one processor core. This computer has {cores} cores, so up to {most} turns can run '
+                     'side by side; each needs about 0.8 GB of memory.', cores=integer(logic.cores()), most=integer(most))
+            if not busy:
+                plan = [dict(state='waiting', post=S.after, turn=k + 1) for k in range(S.turns)]
+                mins = math.ceil(logic.minutes_left(plan, S.at_once, time.time()))
+                text += ' ' + t('{n} at once: about {min} minutes in all.', n=integer(S.at_once), min=integer(mins))
+            hint.setText(text)
+
+        def set_turns(v):
+            S.turns = v
+            update()
+
+        def set_at_once(k):
+            S.at_once = int(k)
+            self.settings.setValue('at_once', S.at_once)
+            update()
+
+        def set_after(on):
+            S.after = on
+            update()
+        turns.valueChanged.connect(set_turns)
+        at_once.changed.connect(set_at_once)
+        after.toggled.connect(set_after)
+        update()
+        at_label = label(t('Run at once'), 'field', wrap=False)
+        controls = row(turns_label, turns, 24, at_label, at_once)
+        go_row = row(after)
+        go_row.layout().addWidget(go); go_row.layout().addWidget(stop)
+        parts = [controls, go_row, hint, label(t('Turn 1 always uses the usual start, so one turn gives the same result every '
+                                         'time. Every other turn starts from a new point.'), 'hint')]
         page = [self.head(title, t('The camera has a few colour controls. The fit finds the settings that come closest '
                                    'to your LUT and measures the difference in ΔE00: below 1 is hard to see, around 2 '
                                    'is a small visible difference.')), box(*parts)]
+        if S.lanes:
+            page.append(self.lanes_box())
         if S.fit and S.fit['kept']:
             page += self.results()
         rec = self.selected_record()
-        page.append(self.nav(2, 4, t('Next: build'), bool(rec) and not S.fitting and rec['decision']['build']))
+        page.append(self.nav(2, 4, t('Next: build'), bool(rec) and not busy and rec['decision']['build']))
         return self.page(*page)
 
+    def lanes_box(self):
+        S = self.S
+        self.lane_rows, self.lane_summary = {}, label('', 'hint', wrap=False)
+        head = row(label(t('Turns'), 'h3'), stretch_end=True)
+        head.layout().addWidget(self.lane_summary)
+        parts = [head]
+        lanes = QWidget(); v = QVBoxLayout(lanes); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(2)
+        for lane in S.lanes:
+            r = LaneRow(lane)
+            self.lane_rows[lane['turn']] = r
+            v.addWidget(r)
+        parts.append(lanes)
+        if S.fitting:
+            add_one = button(t('Add 1 turn'), 'small', lambda: self.start_fit(more=1, post=False))
+            add_after = button(t('Add 1 with colour after the curves'), 'small', lambda: self.start_fit(more=1, post=True))
+            more = row(add_one, add_after, stretch_end=False)
+            more.layout().addWidget(label(t('Added turns start when a core is free.'), 'hint'), 1)
+            parts.append(more)
+        self.update_lanes()
+        return box(*parts, spacing=10)
+
+    def lane_text(self, lane):
+        if lane['state'] == 'waiting':
+            return t('Waiting')
+        if lane['state'] == 'stopped':
+            return t('Stopped')
+        if lane['state'] == 'running':
+            return logic.stage_label(lane['done'])
+        hist = {h['result']: h for h in self.S.fit['history']}
+        h = hist.get(f'turn-{lane["turn"]}')
+        if not h:
+            return ''
+        kept = {gl.result_name(r) for r in self.S.fit['kept']}
+        return f'ΔE00 {i18n.num(h["e"])} · ' + (t('kept') if h['result'] in kept else t('not kept'))
+
+    def update_lanes(self):
+        """The turns' rows and the summary, changed in place (the page stays as it is while turns run)."""
+        S = self.S
+        for lane in S.lanes:
+            r = getattr(self, 'lane_rows', {}).get(lane['turn'])
+            if r is not None:
+                try:
+                    r.show_lane(lane, self.lane_text(lane))
+                except RuntimeError:                     # the page was rebuilt meanwhile
+                    pass
+        running = sum(l['state'] == 'running' for l in S.lanes)
+        waiting = sum(l['state'] == 'waiting' for l in S.lanes)
+        if getattr(self, 'lane_summary', None) is None:
+            return
+        if running or waiting:
+            mins = max(1, math.ceil(logic.minutes_left(S.lanes, S.at_once, time.time())))
+            text = t('{r} running, {w} waiting · about {m} min left', r=integer(running), w=integer(waiting), m=integer(mins))
+        elif S.fitting:
+            text = ''
+        else:
+            text = t('All turns done')
+        try:
+            self.lane_summary.setText(text)
+        except RuntimeError:
+            pass
+
     def start_fit(self, *, more=None, post=None):
-        """A new fit (more=None) or more turns of the current one; never leaves the page stuck in 'fitting'."""
+        """A new fit (more=None), more turns of the current one, or turns added while it runs; never leaves the page
+        stuck in 'fitting'."""
         try:
             self._start_fit(more, post)
         except Exception as exc:
-            self.S.fitting = False
-            gl.STOP = None
+            self.S.fitting, self.batch = False, None
             self.render()
             self.say(t('Something went wrong: {error}', error=f'{type(exc).__name__}: {exc}'))
 
     def _start_fit(self, more, post):
         S = self.S
+        if S.fitting and self.batch is not None:              # added while turns run: they start when a core is free
+            self.queue_turns(self.batch, more or 1, post)
+            self.render()
+            return
         if more is None or S.fit is None:
-            S.fit, S.selected, S.photo_cam = logic.new_fit_state(), None, {}
+            S.fit, S.selected, S.photo_cam, S.lanes = logic.new_fit_state(), None, {}, []
             n, post = (S.turns, S.after) if more is None else (more, post)
         else:
             n = more
-        S.fitting, S.fit_log, S.built = True, [], None
+        S.built = None
         args = logic.fit_args(S.lut['path'], S.space, S.dng, S.slot)
-        state = S.fit
-        self.stop_requested = False
-        gl.STOP = lambda: self.stop_requested
+        batch = logic.Batch(args, S.fit, S.at_once, log=lambda _: None)
+        self.batch = batch
+        self.queue_turns(batch, n, post)
+        S.fitting = True
         self.render()
+        self.run_batch(batch)
+
+    def queue_turns(self, batch, n, post):
+        for k, seed in batch.add(n, post):
+            self.S.lanes.append(dict(turn=k, seed=seed, post=bool(post), state='waiting', done=0, started=None,
+                                     ended=None))
+
+    def run_batch(self, batch):
+        S = self.S
 
         def work(report):
-            for k in range(n):
-                logic.run_turns(args, 1, state, post, log=report)
-            return True
+            batch.notify = lambda: report(('ready',))
+            batch.run(progress=lambda k, line: report(('line', k, line)))
+            return batch
 
-        first_turn = len(state['history_turns']) + 1
-
-        def progress(line):
-            turn = len(state['history_turns']) or first_turn
-            text = logic.progress_line(str(line), turn)
-            if text is None:
+        def progress(msg):
+            if self.batch is not batch:
                 return
-            S.fit_log.append(text)
-            if getattr(self, 'fit_progress', None) is not None:
-                try:
-                    self.fit_progress.setText('\n'.join(S.fit_log[-6:]))
-                except RuntimeError:
-                    pass
+            if msg[0] == 'ready':
+                self.record_turns(batch)
+                return
+            _, k, line = msg
+            lane = next((l for l in S.lanes if l['turn'] == k), None)
+            if lane is None or lane['state'] in ('done', 'stopped'):
+                return
+            if line is None:
+                lane['state'], lane['started'] = 'running', time.time()
+            else:
+                done = logic.stage_done(line)
+                if done is None:
+                    return
+                lane['done'] = max(lane['done'], min(done, logic.lane_steps(lane['post']) - 1))
+            self.update_lanes()
 
         def finished(_=None):
-            S.fitting = False
-            gl.STOP = None
-            rec = gl.recommended(S.fit['kept']) if S.fit['kept'] else None
-            S.selected = gl.result_name(rec) if rec else None
+            if self.batch is not batch:
+                return
+            self.record_turns(batch)
+            if batch.pending and not batch.stopping:          # added just as the last turn ended
+                self.run_batch(batch)
+                return
+            S.fitting, self.batch = False, None
+            for lane in S.lanes:
+                if lane['state'] in ('waiting', 'running'):
+                    lane['state'] = 'stopped'
             self.render()
-            self.say(t('Fit finished: {n} kept', n=len(S.fit['kept'])))
-
-        def stopped():
-            S.fitting = False
-            gl.STOP = None
-            if S.fit and S.fit['kept'] and not S.selected:
-                S.selected = gl.result_name(gl.recommended(S.fit['kept']))
-            self.render()
-            self.say(t('Fit stopped'))
+            if batch.stopping:
+                self.say(t('Batch stopped. Finished turns are kept.'))
+            else:
+                self.say(t('Batch finished: {n} kept', n=integer(len(S.fit['kept']))))
 
         def failed(msg):
-            S.fitting = False
-            gl.STOP = None
+            batch.stop()
+            if self.batch is not batch:
+                return
+            S.fitting, self.batch = False, None
+            for lane in S.lanes:
+                if lane['state'] in ('waiting', 'running'):
+                    lane['state'] = 'stopped'
             self.render()
             self.say(msg)
-        self.run_task(work, finished, failed, progress, stopped)
+        self.batch_task = self.run_task(work, finished, failed, progress)
+
+    def record_turns(self, batch):
+        """Finished turns join the results, in turn order."""
+        S = self.S
+        turns = batch.record()
+        if not turns:
+            return
+        for lane in S.lanes:
+            if lane['turn'] in turns:
+                lane['state'] = 'stopped' if batch.state['history_turns'][lane['turn'] - 1].get('stopped') else 'done'
+                lane['ended'] = time.time()
+                if lane['state'] == 'done':
+                    lane['done'] = logic.lane_steps(lane['post'])
+        if S.fit['kept'] and S.selected not in {gl.result_name(r) for r in S.fit['kept']}:
+            S.selected = gl.result_name(gl.recommended(S.fit['kept']))
+        if S.view == 'steps' and S.step == 3:
+            self.render()
 
     def stop_fit(self):
-        self.stop_requested = True
+        if self.batch is not None:
+            self.batch.stop()
+
+    def drop_batch(self):
+        """The fit is gone (a new LUT, photo or look): its turns stop and nothing they finish is shown."""
+        if self.batch is not None:
+            self.batch.stop()
+        self.batch, self.S.fitting = None, False
+
+    def closeEvent(self, e):
+        """Closing the window ends the turns still running (their helper processes stop with it)."""
+        if self.batch is not None:
+            self.batch.stop()
+            task = getattr(self, 'batch_task', None)
+            if task is not None:
+                task.wait(15000)
+        super().closeEvent(e)
 
     def results(self):
         S = self.S
@@ -808,9 +968,10 @@ class Window(QMainWindow):
             hint = t('Ready to build.')
         head = row(label(t('Results'), 'h3'), pill(t(verdict), {'good': 'good', 'approximate': 'warn'}.get(verdict, 'bad')),
                    label(hint, 'hint'), stretch_end=True)
-        head.layout().addWidget(button(t('Run 1 more turn'), 'small', lambda: self.start_fit(more=1, post=False), not S.fitting))
-        head.layout().addWidget(button(t('1 more with colour after the curves'), 'small',
-                                       lambda: self.start_fit(more=1, post=True), not S.fitting))
+        if not S.fitting:                                     # while turns run, they are added under the turns
+            head.layout().addWidget(button(t('Run 1 more turn'), 'small', lambda: self.start_fit(more=1, post=False)))
+            head.layout().addWidget(button(t('1 more with colour after the curves'), 'small',
+                                           lambda: self.start_fit(more=1, post=True)))
         cols = [t('Result'), t('Whole range'), 'ColorChecker', t('Greys'), t('Photo'), t('Fit score')]
         table = QTableWidget(len(rows), len(cols))
         table.setHorizontalHeaderLabels(cols)
@@ -1000,7 +1161,7 @@ class Window(QMainWindow):
             return
         S.basket.append(cur)
         S.shared, S.shared_error, S.lut, S.built = None, None, None, None
-        S.reset_look()
+        self.reset_look()
         self.go(0)
         self.say(t('Look added. Choose what the next one starts from.'))
 
